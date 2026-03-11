@@ -62,43 +62,94 @@ The human operator, however, needs the opposite: when an alert fires on `herakle
 
 ## The Endpoints
 
+Every capability in Herakles is exposed twice: once as plain text or Prometheus format for machines and automation, and once as HTML for human operators. The split is intentional — the same underlying data, rendered appropriately for each consumer.
+
 ### `/metrics` — Prometheus scrape target
 
 Returns the full metric set in Prometheus text exposition format. No per-PID labels anywhere. All process-level data has been aggregated into `(group, subgroup)` pairs before encoding. Scrape latency is bounded by lock acquisition time, not `/proc` scan time.
 
-**Operational pattern:** Configure Prometheus to scrape this endpoint. Write alerts on group metrics. When an alert fires — e.g. `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"} > 8e9` — open `/html/details?subgroup=postgres` on the affected host to identify the responsible process.
+This is the only endpoint Prometheus should scrape. When an alert fires — e.g. `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"} > 8e9` — open `/html/details?subgroup=postgres` on the affected host to identify the responsible process.
 
-### `/html/details` — Forensic process view
+### Process detail — `/details` and `/html/details`
 
-Full per-process breakdown from the in-memory cache. Accepts a `?subgroup=<name>` query parameter to filter by subgroup. This is where you go after an alert fires.
+Full per-process breakdown from the in-memory cache. Both variants accept a `?subgroup=<n>` query parameter to filter to a specific subgroup. `/details` returns plain text suitable for `curl` and scripts; `/html/details` returns a sortable, filterable HTML table for the browser.
 
-Beyond a simple process list, `/html/details` implements **temporal zone classification**: each process is assigned to one of three phases based on how long it has been running.
+Beyond a simple process list, both endpoints implement **temporal zone classification**: each process is assigned to one of three phases based on age.
 
 | Phase | Age | What it means |
 |---|---|---|
-| Live | < 5 minutes | Recently started; baseline not yet established |
-| Stabilization | 5 – 60 minutes | Settling; compare against short-term baseline |
-| Historical | > 60 minutes | Stable; anomalies here are genuinely unexpected |
+| Live | < 5 min | Recently started; no baseline established yet |
+| Stabilization | 5–60 min | Settling; compared against short-term baseline |
+| Historical | > 60 min | Stable; anomalies here are genuinely unexpected |
 
-Within each phase, the handler computes anomaly severity based on deviation from a rolling baseline, surfacing processes whose memory or CPU consumption is growing unexpectedly. A postgres process in the Historical phase consuming 3× its normal RSS is flagged prominently. A freshly started process consuming the same amount is not — it hasn't had time to establish a baseline.
+Within each phase, anomaly severity is computed from deviation against a rolling baseline stored in the ring buffer. A postgres process in the Historical phase consuming 3× its normal RSS is flagged. A freshly started process consuming the same amount is not.
 
-A plain-text variant is available at `/details` with the same filtering and classification logic.
+**This is where you go after an alert fires.** `curl http://host:9215/details?subgroup=postgres` from a runbook, or open `/html/details?subgroup=postgres` in a browser.
 
-### Supporting endpoints
+### Health — `/health` and `/html/health`
 
-| Method | Path | Audience | Description |
+`/health` returns plain text with HTTP 200 if the cache is valid, 503 otherwise. Suitable for load balancer health checks and monitoring probes.
+
+`/html/health` renders the same data as HTML with additional detail: cache age, last update duration, buffer fill levels for `/proc` I/O buffers (`smaps`, `smaps_rollup`, generic I/O), and eBPF subsystem status — whether eBPF initialized successfully, events processed, and events dropped. This is the right place to look when diagnosing unexpected metric gaps or eBPF initialization failures.
+
+```bash
+curl http://localhost:9215/health
+# ok — cache age 3s, processes 347, ebpf ok
+```
+
+### Configuration — `/config` and `/html/config`
+
+`/config` returns the effective merged configuration as plain text — the result of merging the config file with any CLI overrides. Use this to verify that the right config file was loaded and that CLI flags took effect. Equivalent to running `herakles-node-exporter --show-config` against the live process.
+
+`/html/config` renders the same data as HTML with field descriptions inline.
+
+```bash
+curl http://localhost:9215/config
+```
+
+### Subgroups — `/subgroups` and `/html/subgroups`
+
+`/subgroups` returns all loaded `(group, subgroup)` pairs with their process name patterns and command-line match rules as plain text. Use this to verify that custom entries in `subgroups.toml` were parsed correctly, or to check which pattern a specific process name would match.
+
+`/html/subgroups` renders the same data as a searchable HTML table, useful for browsing the full 140+ entry classification table.
+
+```bash
+curl http://localhost:9215/subgroups | grep postgres
+# db  postgres  matches: [postgres, pg_dump, pg_restore, ...]
+```
+
+### Documentation — `/doc` and `/html/docs`
+
+`/doc` returns a plain-text inline manual: all endpoints, all metrics, configuration fields, and example PromQL queries. Intended as a self-contained reference accessible without network access to external documentation — a manpage served over HTTP.
+
+```bash
+curl http://localhost:9215/doc | less
+```
+
+`/html/docs` and `/docs` render the same content as HTML with navigation.
+
+### Landing page — `/` and `/html`
+
+HTML landing page listing all available endpoints with links, exporter version, uptime, and current cache status. The entry point for any operator who opens the exporter in a browser for the first time.
+
+### Complete endpoint reference
+
+| Path | Text | HTML | Description |
 |---|---|---|---|
-| GET | `/` | Human | HTML landing page with endpoint index and exporter uptime |
-| GET | `/health` | Both | Plain-text health check; HTTP 200 if cache valid, 503 otherwise |
-| GET | `/config` | Human/Automation | Effective configuration in plain text |
-| GET | `/subgroups` | Human/Automation | All loaded `(group, subgroup)` pairs with their match patterns |
-| GET | `/doc` | Human | Inline plain-text documentation |
-| GET | `/html` | Human | HTML index |
-| GET | `/html/subgroups` | Human | HTML view of the subgroup classification table |
-| GET | `/html/health` | Human | HTML view of health and buffer statistics |
-| GET | `/html/config` | Human | HTML view of current configuration |
-| GET | `/html/docs` | Human | HTML documentation |
-| GET | `/docs` | Human | HTML documentation (alias) |
+| `/metrics` | ✓ | — | Prometheus scrape target — no PID labels |
+| `/details` | ✓ | — | Per-process forensic view with temporal classification |
+| `/html/details` | — | ✓ | Per-process forensic view, sortable HTML table |
+| `/health` | ✓ | — | Health check; 200 ok / 503 degraded |
+| `/html/health` | — | ✓ | Health + buffer fill levels + eBPF status |
+| `/config` | ✓ | — | Effective merged configuration |
+| `/html/config` | — | ✓ | Effective configuration with field descriptions |
+| `/subgroups` | ✓ | — | Loaded classification rules with match patterns |
+| `/html/subgroups` | — | ✓ | Classification table, searchable |
+| `/doc` | ✓ | — | Inline manual — metrics, config, PromQL (manpage over HTTP) |
+| `/html/docs` | — | ✓ | Same as `/doc`, rendered as HTML |
+| `/docs` | — | ✓ | Alias for `/html/docs` |
+| `/` | — | ✓ | Landing page with endpoint index and uptime |
+| `/html` | — | ✓ | Alias for `/` |
 
 ---
 
