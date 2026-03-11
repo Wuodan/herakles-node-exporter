@@ -1,529 +1,321 @@
 # Herakles Node Exporter
 
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Prometheus](https://img.shields.io/badge/prometheus-exporter-red.svg)](https://prometheus.io)
+[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![Prometheus](https://img.shields.io/badge/prometheus-compatible-red.svg)](https://prometheus.io)
 
-A high-performance Prometheus exporter for comprehensive Linux system monitoring. Provides detailed per-process memory and CPU metrics, system-wide resource metrics, disk I/O statistics, filesystem usage, and network interface statistics with intelligent process classification.
+A Prometheus exporter for Linux system metrics that aggregates per-process resource usage into named process groups, exposing clean group-level time series without per-PID cardinality.
 
-## 🚀 Key Features
+---
 
-- **Per-Process Memory Metrics**: RSS (Resident Set Size), PSS (Proportional Set Size), USS (Unique Set Size)
-- **CPU Metrics**: Per-process CPU percentage and total CPU time
-- **System Metrics**: Memory, CPU, load averages, and pressure stall information (PSI)
-- **Disk I/O Metrics**: Read/write operations, bytes transferred, I/O time statistics per device
-- **Filesystem Metrics**: Size, available space, inode statistics per mount point
-- **Network Metrics**: Bytes, packets, errors, and drops per network interface
-- **eBPF-based Per-Process I/O Tracking** (optional): Network and disk I/O per process, TCP connection states
-- **Intelligent Process Classification**: 140+ built-in subgroups for automatic process categorization
-- **Top-N Metrics**: Track top memory/CPU consumers per subgroup
-- **High Performance**: Background caching, parallel processing, optimized `/proc` parsing
-- **Flexible Configuration**: YAML/JSON/TOML config files, CLI overrides, environment variables
-- **Production Ready**: Graceful shutdown, health endpoints, comprehensive logging
+## Why Herakles?
 
-## 📊 Metrics Overview
+Most process-aware Prometheus exporters expose per-PID label dimensions. This causes two well-understood problems: label cardinality explodes as processes restart and accumulate new PIDs, and the resulting time series are too fine-grained to be actionable in alert rules. An alert that fires on `process{pid="12345"}` is operationally useless because the PID changes every restart and the label set varies across hosts.
 
-### Process Metrics
+Herakles solves this by classifying every running process into a named (`group`, `subgroup`) pair at scrape time. The metrics at `/metrics` carry only these two stable label dimensions — never a PID, never a raw command name. `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"}` means the same thing on every host and survives any number of postgres restarts without any stale series accumulation. This makes it safe to write recording rules and multi-host federation queries over group metrics without cardinality concerns.
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_mem_process_rss_bytes` | Resident Set Size per process | pid, name, group, subgroup |
-| `herakles_mem_process_pss_bytes` | Proportional Set Size per process | pid, name, group, subgroup |
-| `herakles_mem_process_uss_bytes` | Unique Set Size per process | pid, name, group, subgroup |
-| `herakles_cpu_process_usage_percent` | CPU usage percentage | pid, name, group, subgroup |
-| `herakles_cpu_process_time_seconds` | Total CPU time used | pid, name, group, subgroup |
-| `herakles_group_memory_*` | Aggregated memory metrics per subgroup | group, subgroup |
-| `herakles_mem_top_process_*` | Top-N memory metrics per subgroup | group, subgroup, rank, pid, comm |
-| `herakles_group_cpu_*` | Aggregated CPU metrics per subgroup | group, subgroup |
-| `herakles_cpu_top_process_*` | Top-N CPU metrics per subgroup | group, subgroup, rank, pid, comm |
+The human operator, however, needs the opposite: when an alert fires on `herakles_group_memory_rss_bytes`, they want to know _which_ postgres process is responsible. For this, `/details` and `/html/details` intentionally expose high-cardinality data — PIDs, USS per process, CPU percentages — that would be unsafe in Prometheus but are perfectly appropriate in a forensic endpoint that is read by humans or automation on demand, never scraped continuously. This separation is architectural: the Prometheus scrape path and the operator inspection path are different endpoints with different contracts.
 
-### Top Process Metrics
+The cache model follows from the same reasoning. `/metrics` serves data from an in-memory cache that is refreshed on-demand at most every 5 seconds (`CACHE_UPDATE_THROTTLE_SECS`). This means a Prometheus scrape never blocks on `/proc` I/O: the scrape handler reads from cache, while a background tokio task asynchronously updates it. The cost is that metrics may lag by up to one cache TTL — an acceptable trade-off for a monitoring system where staleness on the order of seconds is irrelevant.
 
-Track the highest resource-consuming processes within each group/subgroup. See [Top Process Metrics](wiki/Top-Process-Metrics.md) for detailed documentation.
+The `group`/`subgroup` classification is implemented as a static lookup table compiled from `data/subgroups.toml`. Process names that match no entry fall into `{group="other", subgroup="unknown"}`. Custom rules can be added to the TOML without modifying source code.
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `herakles_top_cpu_process_usage_ratio` | Gauge | Top-3 processes by CPU usage (0.0 to 1.0) |
-| `herakles_top_cpu_process_seconds_total` | Counter | Cumulative CPU time for top-3 CPU processes |
-| `herakles_top_mem_process_rss_bytes` | Gauge | Top-3 processes by RSS memory |
-| `herakles_top_mem_process_pss_bytes` | Gauge | Top-3 processes by PSS memory |
-| `herakles_top_blkio_process_read_bytes_total` | Counter | Top-3 processes by disk read bytes |
-| `herakles_top_blkio_process_write_bytes_total` | Counter | Top-3 processes by disk write bytes |
-| `herakles_top_net_process_rx_bytes_total` | Counter | Top-3 processes by network RX bytes (eBPF) |
-| `herakles_top_net_process_tx_bytes_total` | Counter | Top-3 processes by network TX bytes (eBPF) |
+---
+
+## The Endpoint Architecture
+
+Herakles exposes two distinct categories of HTTP endpoint: machine-readable endpoints designed for Prometheus and automation, and human-readable endpoints designed for operator inspection.
+
+### `/metrics` — Prometheus scrape target
+
+`GET /metrics` returns the full metric set in Prometheus text exposition format. This is the only endpoint that Prometheus should scrape. It contains no per-PID labels; all process-level data has been aggregated into `(group, subgroup)` pairs before encoding. On each request, the handler checks whether the cache is stale (older than 5 seconds) and, if so, spawns a background task to refresh it, then immediately returns the current cached data. Scrape latency is therefore bounded by lock acquisition time, not `/proc` scan time.
+
+The intended usage pattern: configure Prometheus to scrape `http://<host>:9215/metrics`. When an alert fires — for example, `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"} > 8e9` — open `/html/details?subgroup=postgres` on the affected host to find which individual postgres process is responsible.
+
+### `/details` and `/html/details` — Forensic process view
+
+`GET /details` (plain text) and `GET /html/details` (HTML) expose per-process data from the in-memory cache. Both endpoints accept a `?subgroup=<name>` query parameter to filter by subgroup. The details handler implements temporal zone classification: processes younger than 5 minutes are in the `Live` phase, 5–60 minutes in `Stabilization`, and older than 60 minutes in `Historical`. For each phase, the handler computes anomaly severity based on deviation from a rolling baseline, surfacing processes whose memory or CPU consumption is growing unexpectedly.
+
+This data is intentionally not in `/metrics` because it contains PIDs and per-process metrics that are high-cardinality and change with every restart. The details endpoints are for human operators and automated runbooks, not continuous Prometheus scraping.
+
+**Workflow**: alert fires on group metric → open `/html/details?subgroup=<name>` to identify the responsible process → examine PID, USS, CPU, and I/O rates → act.
+
+### Other endpoints
+
+| Method | Path | Audience | Description |
+|--------|------|----------|-------------|
+| GET | `/` | Human | HTML landing page with all endpoint links and exporter uptime |
+| GET | `/health` | Both | Plain-text health check; returns HTTP 200 if cache is valid, 503 otherwise |
+| GET | `/config` | Human/Automation | Current effective configuration in plain text |
+| GET | `/subgroups` | Human/Automation | All loaded (group, subgroup) pairs with their process name patterns |
+| GET | `/doc` | Human | Inline plain-text documentation |
+| GET | `/docs` | Human | HTML documentation |
+| GET | `/html` | Human | HTML index |
+| GET | `/html/subgroups` | Human | HTML view of subgroup classification table |
+| GET | `/html/health` | Human | HTML view of health and buffer statistics |
+| GET | `/html/config` | Human | HTML view of current configuration |
+| GET | `/html/docs` | Human | HTML documentation |
+
+---
+
+## Process Classification
+
+Every process that appears in `/proc` is classified into a `(group, subgroup)` pair by matching its executable name against the entries in `data/subgroups.toml`. The matching logic checks `matches` (process name prefixes) and `cmdline_matches` (command-line substrings). A process that matches no entry is assigned `{group="other", subgroup="unknown"}`.
+
+The built-in groups and their subgroups are:
+
+| Group | Subgroups |
+|-------|-----------|
+| `backup` | bacula, commvault, cohesity, netbackup, networker, rubrik, spectrum_protect, tsm, veeam |
+| `cache` | memcached, redis, varnish |
+| `cicd` | ansible, chef, gitlab, jenkins, openstack, puppet, saltstack, terraform |
+| `container` | containerd, crio, docker, kubelet, podman |
+| `db` | cassandra, clickhouse, cockroachdb, couchbase, couchdb, db2, influxdb, mongodb, mssql, mysql, oracle, percona, postgres, rethinkdb, timescaledb, yugabyte |
+| `erp` | peoplesoft, sap |
+| `logging` | elasticsearch, filebeat, fluentd, graylog, kibana, log_collectors, logstash, splunk |
+| `messaging` | activemq, kafka, nats, nsq, pulsar, rabbitmq, zeromq |
+| `monitoring` | alertmanager, blackbox, grafana, icinga_nagios, node_exporter, percona, prometheus, snmp, telegraf, thanos, victoriametrics, zabbix |
+| `network` | bind, dhcp, haproxy, keepalived, lvs, ntp, proxy_squid, vpn |
+| `runtime` | go, java, nodejs, php, python, ruby |
+| `security` | audit_tools, freeipa, kerberos_client, keycloak, ldap_client, osquery, selinux_apparmor, snort, sssd, suricata, vault, wazuh, zeek |
+| `storage` | ceph, drbd, gluster, iscsi, lustre, minio, nfs, samba |
+| `system` | audit, cron, firewall, kernel, postfix, rsyslog, sendmail, ssh, systemd |
+| `virtualization` | libvirt, qemu, vbox |
+| `web` | apache, caddy, glassfish, jetty, nginx, springboot, tomcat, weblogic, websphere |
+| `other` | unknown (fallback for unclassified processes) |
+
+### Custom subgroups
+
+The classification table is defined in `data/subgroups.toml`. Each entry follows this structure:
+
+```toml
+subgroups = [
+  { group = "db", subgroup = "mysql", matches = [
+    "mysqld",
+    "mariadbd",
+  ] },
+  { group = "web", subgroup = "tomcat", matches = [
+    "tomcat",
+  ], cmdline_matches = [
+    "org.apache.catalina.startup.Bootstrap",
+    "catalina.sh",
+  ] },
+]
+```
+
+- `group` — coarse category, appears as the `group` label in Prometheus
+- `subgroup` — specific service name, appears as the `subgroup` label
+- `matches` — list of process name prefixes (matched against `/proc/<pid>/comm`)
+- `cmdline_matches` — list of substrings matched against the full command line (useful for JVM processes where `comm` is always `java`)
+
+To control which groups are active at runtime, use `search_mode`, `search_groups`, and `search_subgroups` in the configuration file.
+
+---
+
+## Metrics Reference
+
+### Exporter Self-Metrics
+
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_exporter_scrape_duration_seconds` | Gauge | Time spent serving /metrics request (reading from cache) | — |
+| `herakles_exporter_processes_total` | Gauge | Number of processes currently exported by herakles-node-exporter | — |
+| `herakles_exporter_cache_update_duration_seconds` | Gauge | Time spent updating the process metrics cache in background | — |
+| `herakles_exporter_cache_update_success` | Gauge | Whether the last cache update was successful (1) or failed (0) | — |
+| `herakles_exporter_cache_updating` | Gauge | Whether cache update is currently in progress (1) or idle (0) | — |
+
+### Process Group Metrics
+
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_group_cpu_usage_ratio` | Gauge | CPU usage ratio per group and subgroup (0.0–1.0) | `group`, `subgroup` |
+| `herakles_group_cpu_seconds_total` | Counter | Total CPU time in seconds per group, subgroup, and mode | `group`, `subgroup`, `mode` |
+| `herakles_group_memory_rss_bytes` | Gauge | Sum of RSS bytes per group and subgroup | `group`, `subgroup` |
+| `herakles_group_memory_pss_bytes` | Gauge | Sum of PSS bytes per group and subgroup | `group`, `subgroup` |
+| `herakles_group_memory_swap_bytes` | Gauge | Sum of swap bytes per group and subgroup | `group`, `subgroup` |
+| `herakles_group_blkio_read_bytes_total` | Counter | Total bytes read per group and subgroup | `group`, `subgroup` |
+| `herakles_group_blkio_write_bytes_total` | Counter | Total bytes written per group and subgroup | `group`, `subgroup` |
+| `herakles_group_blkio_read_syscalls_total` | Counter | Total read syscalls per group and subgroup | `group`, `subgroup` |
+| `herakles_group_blkio_write_syscalls_total` | Counter | Total write syscalls per group and subgroup | `group`, `subgroup` |
+| `herakles_group_net_rx_bytes_total` | Counter | Total bytes received per group and subgroup (eBPF) | `group`, `subgroup` |
+| `herakles_group_net_tx_bytes_total` | Counter | Total bytes transmitted per group and subgroup (eBPF) | `group`, `subgroup` |
+| `herakles_group_net_connections_total` | Gauge | Total network connections per group, subgroup, and protocol | `group`, `subgroup`, `proto` |
 
 ### System Memory Metrics
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_memory_total_bytes` | Total system memory in bytes | - |
-| `herakles_system_memory_available_bytes` | Available system memory in bytes | - |
-| `herakles_system_memory_used_ratio` | Memory used ratio (0.0 to 1.0) | - |
-| `herakles_system_memory_cached_bytes` | Page cache memory in bytes | - |
-| `herakles_system_memory_buffers_bytes` | Buffer cache memory in bytes | - |
-| `herakles_system_swap_used_ratio` | Swap used ratio (0.0 to 1.0) | - |
-| `herakles_system_memory_psi_wait_seconds_total` | Memory pressure stall total seconds | - |
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_memory_total_bytes` | Gauge | Total system memory in bytes | — |
+| `herakles_system_memory_available_bytes` | Gauge | Available system memory in bytes | — |
+| `herakles_system_memory_used_ratio` | Gauge | System memory used ratio (0.0–1.0) | — |
+| `herakles_system_memory_cached_bytes` | Gauge | Page cache memory in bytes | — |
+| `herakles_system_memory_buffers_bytes` | Gauge | Buffer cache memory in bytes | — |
+| `herakles_system_swap_used_ratio` | Gauge | System swap memory used ratio (0.0–1.0) | — |
+| `herakles_system_memory_psi_wait_seconds_total` | Counter | Total memory pressure stall time in seconds | — |
 
 ### System CPU Metrics
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_cpu_usage_ratio` | CPU usage ratio per core and total | cpu |
-| `herakles_system_cpu_idle_ratio` | CPU idle ratio per core and total | cpu |
-| `herakles_system_cpu_iowait_ratio` | CPU IO-wait ratio per core and total | cpu |
-| `herakles_system_cpu_steal_ratio` | CPU steal time ratio per core and total | cpu |
-| `herakles_system_cpu_load_1` | System load average over 1 minute | - |
-| `herakles_system_cpu_load_5` | System load average over 5 minutes | - |
-| `herakles_system_cpu_load_15` | System load average over 15 minutes | - |
-| `herakles_system_cpu_psi_wait_seconds_total` | CPU pressure stall total seconds | - |
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_cpu_usage_ratio` | Gauge | System CPU usage ratio (0.0–1.0) | — |
+| `herakles_system_cpu_idle_ratio` | Gauge | System CPU idle ratio (0.0–1.0) | — |
+| `herakles_system_cpu_iowait_ratio` | Gauge | System CPU iowait ratio (0.0–1.0) | — |
+| `herakles_system_cpu_steal_ratio` | Gauge | System CPU steal ratio (0.0–1.0) | — |
+| `herakles_system_cpu_load_1` | Gauge | System load average over 1 minute | — |
+| `herakles_system_cpu_load_5` | Gauge | System load average over 5 minutes | — |
+| `herakles_system_cpu_load_15` | Gauge | System load average over 15 minutes | — |
+| `herakles_system_cpu_psi_wait_seconds_total` | Counter | Total CPU pressure stall time in seconds | — |
 
 ### Disk I/O Metrics
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_disk_read_bytes_total` | Total number of bytes read | device |
-| `herakles_system_disk_write_bytes_total` | Total number of bytes written | device |
-| `herakles_system_disk_io_time_seconds_total` | Total seconds spent doing I/Os | device |
-| `herakles_system_disk_queue_depth` | Current I/O queue depth | device |
-| `herakles_system_disk_psi_wait_seconds_total` | Disk pressure stall total seconds | - |
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_disk_read_bytes_total` | Counter | Total bytes read from disk device | `device` |
+| `herakles_system_disk_write_bytes_total` | Counter | Total bytes written to disk device | `device` |
+| `herakles_system_disk_io_time_seconds_total` | Counter | Total time spent doing I/Os in seconds | `device` |
+| `herakles_system_disk_queue_depth` | Gauge | Number of I/O operations currently in progress for disk device | `device` |
+| `herakles_system_disk_psi_wait_seconds_total` | Counter | Total I/O pressure stall time in seconds | — |
 
 ### Filesystem Metrics
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_filesystem_size_bytes` | Filesystem size in bytes | device, mountpoint, fstype |
-| `herakles_system_filesystem_avail_bytes` | Filesystem space available to non-root users | device, mountpoint, fstype |
-| `herakles_system_filesystem_files` | Filesystem total file nodes (inodes) | device, mountpoint, fstype |
-| `herakles_system_filesystem_files_free` | Filesystem total free file nodes | device, mountpoint, fstype |
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_filesystem_avail_bytes` | Gauge | Filesystem space available to non-root users in bytes | `device`, `mountpoint`, `fstype` |
+| `herakles_system_filesystem_size_bytes` | Gauge | Filesystem total size in bytes | `device`, `mountpoint`, `fstype` |
+| `herakles_system_filesystem_files` | Gauge | Filesystem total file nodes | `device`, `mountpoint`, `fstype` |
+| `herakles_system_filesystem_files_free` | Gauge | Filesystem free file nodes | `device`, `mountpoint`, `fstype` |
 
-### Network Interface Metrics
+### Network Metrics
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_net_rx_bytes_total` | Network device bytes received | iface |
-| `herakles_system_net_tx_bytes_total` | Network device bytes transmitted | iface |
-| `herakles_system_net_rx_errors_total` | Network device receive errors | iface |
-| `herakles_system_net_tx_errors_total` | Network device transmit errors | iface |
-| `herakles_system_net_drops_total` | Network device drops | iface, direction |
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_net_rx_bytes_total` | Counter | Total bytes received per network interface | `iface` |
+| `herakles_system_net_tx_bytes_total` | Counter | Total bytes transmitted per network interface | `iface` |
+| `herakles_system_net_rx_errors_total` | Counter | Total receive errors per network interface | `iface` |
+| `herakles_system_net_tx_errors_total` | Counter | Total transmit errors per network interface | `iface` |
+| `herakles_system_net_drops_total` | Counter | Total dropped packets per network interface and direction | `iface`, `direction` |
 
 ### TCP Connection State Metrics
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_tcp_connections_established` | TCP connections in ESTABLISHED state | - |
-| `herakles_system_tcp_connections_syn_sent` | TCP connections in SYN_SENT state | - |
-| `herakles_system_tcp_connections_syn_recv` | TCP connections in SYN_RECV state | - |
-| `herakles_system_tcp_connections_fin_wait1` | TCP connections in FIN_WAIT1 state | - |
-| `herakles_system_tcp_connections_fin_wait2` | TCP connections in FIN_WAIT2 state | - |
-| `herakles_system_tcp_connections_time_wait` | TCP connections in TIME_WAIT state | - |
-| `herakles_system_tcp_connections_close` | TCP connections in CLOSE state | - |
-| `herakles_system_tcp_connections_close_wait` | TCP connections in CLOSE_WAIT state | - |
-| `herakles_system_tcp_connections_last_ack` | TCP connections in LAST_ACK state | - |
-| `herakles_system_tcp_connections_listen` | TCP connections in LISTEN state | - |
-| `herakles_system_tcp_connections_closing` | TCP connections in CLOSING state | - |
+These metrics are populated by eBPF when the `ebpf` feature is compiled in and `enable_tcp_tracking` is `true`. The metrics are always registered in the Prometheus registry but only updated by the eBPF subsystem.
 
-### Hardware and Host Metrics
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_tcp_connections_established` | Gauge | Number of TCP connections in ESTABLISHED state | — |
+| `herakles_system_tcp_connections_syn_sent` | Gauge | Number of TCP connections in SYN_SENT state | — |
+| `herakles_system_tcp_connections_syn_recv` | Gauge | Number of TCP connections in SYN_RECV state | — |
+| `herakles_system_tcp_connections_fin_wait1` | Gauge | Number of TCP connections in FIN_WAIT1 state | — |
+| `herakles_system_tcp_connections_fin_wait2` | Gauge | Number of TCP connections in FIN_WAIT2 state | — |
+| `herakles_system_tcp_connections_time_wait` | Gauge | Number of TCP connections in TIME_WAIT state | — |
+| `herakles_system_tcp_connections_close` | Gauge | Number of TCP connections in CLOSE state | — |
+| `herakles_system_tcp_connections_close_wait` | Gauge | Number of TCP connections in CLOSE_WAIT state | — |
+| `herakles_system_tcp_connections_last_ack` | Gauge | Number of TCP connections in LAST_ACK state | — |
+| `herakles_system_tcp_connections_listen` | Gauge | Number of TCP connections in LISTEN state | — |
+| `herakles_system_tcp_connections_closing` | Gauge | Number of TCP connections in CLOSING state | — |
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_cpu_temp_celsius` | CPU temperature in Celsius | sensor |
-| `herakles_system_uptime_seconds` | System uptime in seconds | - |
-| `herakles_system_boot_time_seconds` | System boot time as Unix timestamp | - |
-| `herakles_system_uname_info` | System uname information (always 1) | sysname, release, version, machine |
+### Hardware & Host Metrics
 
-### Kernel and Runtime Metrics
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_system_cpu_temp_celsius` | Gauge | CPU/sensor temperature in Celsius | `sensor` |
+| `herakles_system_uptime_seconds` | Gauge | System uptime in seconds | — |
+| `herakles_system_boot_time_seconds` | Gauge | System boot time as Unix timestamp | — |
+| `herakles_system_uname_info` | Gauge | System information from uname | `sysname`, `release`, `version`, `machine` |
+| `herakles_system_context_switches_total` | Counter | Total number of context switches | — |
+| `herakles_system_forks_total` | Counter | Total number of forks since boot | — |
+| `herakles_system_open_fds` | Gauge | Number of file descriptors system-wide | `state` |
+| `herakles_system_entropy_bits` | Gauge | Available entropy in bits | — |
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_system_context_switches_total` | Total number of context switches | - |
-| `herakles_system_forks_total` | Total number of process forks | - |
-| `herakles_system_open_fds` | Number of open file descriptors | state |
-| `herakles_system_entropy_bits` | Available entropy in bits | - |
+### eBPF Metrics
 
-### Group and Subgroup Metrics
+These metrics track the health of the eBPF subsystem itself. They are always registered in the Prometheus registry but only updated when the `ebpf` Cargo feature is compiled in and eBPF initialization succeeds at runtime.
 
-Aggregated metrics per process group and subgroup (always available):
+| Metric | Type | Description | Labels |
+|--------|------|-------------|--------|
+| `herakles_ebpf_events_processed_total` | Counter | Total number of eBPF events processed | — |
+| `herakles_ebpf_events_dropped_total` | Counter | Total number of eBPF events dropped | — |
+| `herakles_ebpf_maps_count` | Gauge | Number of eBPF programs currently loaded | — |
+| `herakles_ebpf_cpu_seconds_total` | Counter | Total CPU time used by eBPF programs in seconds | — |
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_group_memory_rss_bytes` | Aggregated RSS memory per subgroup | group, subgroup |
-| `herakles_group_memory_pss_bytes` | Aggregated PSS memory per subgroup | group, subgroup |
-| `herakles_group_memory_swap_bytes` | Aggregated swap usage per subgroup | group, subgroup |
-| `herakles_group_cpu_usage_ratio` | Aggregated CPU usage ratio per subgroup | group, subgroup |
-| `herakles_group_cpu_seconds_total` | Aggregated CPU time per subgroup and mode | group, subgroup, mode |
-| `herakles_group_blkio_read_bytes_total` | Aggregated disk read bytes per subgroup | group, subgroup |
-| `herakles_group_blkio_write_bytes_total` | Aggregated disk write bytes per subgroup | group, subgroup |
-| `herakles_group_blkio_read_syscalls_total` | Aggregated disk read syscalls per subgroup | group, subgroup |
-| `herakles_group_blkio_write_syscalls_total` | Aggregated disk write syscalls per subgroup | group, subgroup |
-| `herakles_group_net_rx_bytes_total` | Aggregated network RX bytes per subgroup (eBPF) | group, subgroup |
-| `herakles_group_net_tx_bytes_total` | Aggregated network TX bytes per subgroup (eBPF) | group, subgroup |
-| `herakles_group_net_connections_total` | Aggregated network connections per subgroup (eBPF) | group, subgroup, proto |
+---
 
-### eBPF Performance Metrics
+## Installation
 
-Self-monitoring metrics for the eBPF subsystem (requires `ebpf` feature):
+### Standard build (eBPF enabled by default)
 
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_ebpf_events_processed_total` | Total eBPF events processed | - |
-| `herakles_ebpf_events_dropped_total` | Total eBPF events dropped | - |
-| `herakles_ebpf_maps_count` | Number of active eBPF maps | - |
-| `herakles_ebpf_cpu_seconds_total` | CPU time spent in eBPF programs | - |
-
-### eBPF-based Process I/O Metrics (Optional Feature)
-
-When the `ebpf` feature is enabled and eBPF is configured, these additional metrics provide per-process I/O tracking:
-
-| Metric | Description | Labels |
-|--------|-------------|--------|
-| `herakles_net_process_bytes_total` | TCP/UDP bytes per process from eBPF | pid, comm, group, subgroup, direction (rx/tx) |
-| `herakles_net_process_packets_total` | TCP/UDP packets per process from eBPF | pid, comm, group, subgroup, direction (rx/tx) |
-| `herakles_net_process_dropped_total` | Dropped packets per process from eBPF | pid, comm, group, subgroup |
-| `herakles_io_process_bytes_total` | Block I/O bytes per process/device from eBPF | pid, comm, device, group, subgroup, direction (read/write) |
-| `herakles_io_process_iops_total` | I/O operations per process/device from eBPF | pid, comm, device, group, subgroup, direction (read/write) |
-
-**eBPF Requirements:**
-- Linux kernel >= 4.18 (for CO-RE eBPF support with BTF)
-- BTF (BPF Type Format) support: `/sys/kernel/btf/vmlinux` must exist
-- CAP_BPF + CAP_PERFMON capabilities (or root access)
-- Build dependencies: clang >= 10, llvm >= 10, libbpf-dev, linux-headers, bpftool
-- Compile with `--features ebpf` flag
-
-**Building with eBPF support:**
+The `ebpf` feature is the default. Building with eBPF requires `clang`, `bpftool`, and a kernel with BTF support (`/sys/kernel/btf/vmlinux`).
 
 ```bash
-# Install required system packages (Ubuntu/Debian)
-sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r) bpftool
-
-# Build with eBPF feature
-cargo build --release --features ebpf
-
-# The build process will automatically:
-# 1. Generate vmlinux.h from your kernel's BTF information
-# 2. Compile the eBPF C programs to BPF bytecode
-# 3. Embed the compiled programs into the Rust binary
-```
-
-**Configuration:**
-
-eBPF is **enabled by default** in the configuration. To disable it, create a configuration file:
-
-```yaml
-# config.yaml
-enable_ebpf: false
-```
-
-And run with:
-```bash
-herakles-node-exporter --config config.yaml
-```
-
-You can also use the command-line to see the current configuration:
-```bash
-# Show the default configuration (eBPF enabled)
-herakles-node-exporter --show-config --no-config
-```
-
-**Graceful Degradation:**
-
-If eBPF initialization fails (missing kernel support, insufficient permissions, or disabled feature), the exporter continues with all standard metrics. eBPF metrics will simply be absent from the output. Check the logs for eBPF status:
-
-```bash
-# eBPF successfully initialized:
-INFO ✅ eBPF programs loaded and attached successfully
-INFO    - Network RX/TX tracking enabled
-INFO    - Block I/O tracking enabled
-INFO    - TCP state tracking enabled
-
-# eBPF not available:
-WARN ⚠️  Failed to initialize eBPF: [reason] - running without eBPF metrics
-```
-
-**Note:** When eBPF is not available or fails to initialize, the exporter gracefully continues with all standard metrics.
-
-
-## 📦 Installation
-
-### Building
-
-#### Standard Build (eBPF enabled by default)
-
-eBPF-based process I/O tracking is now enabled by default:
-
-```bash
-# Clone the repository
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
-cd herakles-node-exporter
-
-# Install build dependencies (Debian/Ubuntu)
-sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r) bpftool
-
-# Build with automatic binary copying (eBPF included automatically)
+# Release build with eBPF (default)
 make release
 
-# Or use the build script
-./build.sh --release
-
-# Or use cargo directly (manual copy needed)
+# Or directly with cargo
 cargo build --release
 
-# The binary is automatically copied to binary/herakles-node-exporter
-# when using make or build.sh
-
-# Run with required capabilities
-sudo setcap cap_bpf,cap_perfmon+ep binary/herakles-node-exporter
-./binary/herakles-node-exporter
-
-# Install to /usr/local/bin
-sudo cp binary/herakles-node-exporter /usr/local/bin/
+# Binary is placed in binary/herakles-node-exporter
 ```
 
-**System Requirements for eBPF:**
-- Linux kernel ≥ 4.18
-- BTF support: `/sys/kernel/btf/vmlinux` must exist
-- Capabilities: `CAP_BPF` + `CAP_PERFMON` (or root)
-
-**Graceful Degradation:**
-If eBPF initialization fails, the exporter continues with standard metrics and logs a warning.
-
-#### Building Without eBPF
-
-To build without eBPF support (smaller binary, no eBPF build dependencies):
+### Build without eBPF
 
 ```bash
-# Using make
-make release CARGOFLAGS="--no-default-features"
-
-# Using build script
-./build.sh --release --no-default-features
-
-# Using cargo directly
+make build CARGOFLAGS='--no-default-features'
+# Or
 cargo build --release --no-default-features
 ```
 
-#### Build Options
+### System-wide installation
 
-The project provides three ways to build with automatic binary copying to `binary/`:
-
-1. **Makefile** (recommended for CI/CD):
-   ```bash
-   make build          # Debug build
-   make release        # Release build
-   make build CARGOFLAGS="--no-default-features"  # Custom flags
-   ```
-
-2. **Build Script** (convenient wrapper):
-   ```bash
-   ./build.sh          # Debug build
-   ./build.sh --release --no-default-features
-   ```
-
-3. **Cargo directly** (manual copy needed):
-   ```bash
-   cargo build --release
-   # Manual copy: cp target/release/herakles-node-exporter binary/
-   ```
-
-The `binary/` directory is automatically created and excluded from git. The binary is named `herakles-node-exporter` regardless of the build profile.
-
-#### Troubleshooting eBPF Build
-
-If eBPF compilation fails:
-
-1. **Check kernel headers**:
-   ```bash
-   ls -la /sys/kernel/btf/vmlinux
-   sudo apt-get install linux-headers-$(uname -r)
-   ```
-
-2. **Check clang version** (needs ≥10):
-   ```bash
-   clang --version
-   ```
-
-3. **Verify bpftool**:
-   ```bash
-   bpftool version
-   ```
-
-4. **Manual vmlinux.h generation**:
-   ```bash
-   cd src/ebpf/bpf
-   bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
-   ```
-
-### From Source (Development Build)
+The `install` subcommand copies the binary to the system path and optionally enables a systemd service:
 
 ```bash
-cargo build
-./target/debug/herakles-node-exporter --help
+sudo ./herakles-node-exporter install
+# Skip systemd service setup:
+sudo ./herakles-node-exporter install --no-service
+# Force reinstall over existing installation:
+sudo ./herakles-node-exporter install --force
 ```
 
-### Debian/Ubuntu Package
+To uninstall:
 
 ```bash
-# Install cargo-deb if not present
-cargo install cargo-deb
-
-# Build .deb package
-cargo deb
-
-# Install the package
-sudo dpkg -i target/debian/herakles-node-exporter_*.deb
+sudo ./herakles-node-exporter uninstall
 ```
 
 ### Docker
 
-```bash
-# Build Docker image
-docker build -t herakles-node-exporter .
+The Dockerfile expects a pre-built statically linked musl binary named `herakles-node-exporter` in the build context (produced by a CI pipeline). It uses `alpine:3.19` as the base image and runs as the `herakles` user (uid=1000).
 
-# Run container
+```bash
+# Build (requires pre-built binary in current directory)
+docker build -t herakles-node-exporter:latest .
+
+# Run — /proc must be bind-mounted for full host monitoring
 docker run -d \
-  --name herakles-exporter \
+  --name herakles-node-exporter \
+  --pid=host \
+  -v /proc:/proc:ro \
   -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  herakles-node-exporter
+  herakles-node-exporter:latest
 ```
 
-## ⚡ Quick Start
+> **Note:** The container image runs as the `herakles` user. Without `--pid=host` and a `/proc` bind-mount, only processes visible to that user will be monitored. See the Docker Compose section for a complete example.
 
-```bash
-# Start with default settings (port 9215)
-herakles-node-exporter
+---
 
-# Start with custom port
-herakles-node-exporter -p 9216
+## Configuration
 
-# Start with config file
-herakles-node-exporter -c /etc/herakles/config.yaml
+Configuration is loaded from the first file found in this search order, then merged with CLI flags (CLI takes precedence):
 
-# Check system requirements
-herakles-node-exporter check --all
+1. `/etc/herakles/node-exporter.yaml`
+2. `/etc/herakles/node-exporter.yml`
+3. `/etc/herakles/node-exporter.json`
+4. `./herakles-node-exporter.yaml`
+5. `./herakles-node-exporter.yml`
+6. `./herakles-node-exporter.json`
 
-# View current configuration
-herakles-node-exporter --show-config
-```
+YAML, JSON, and TOML formats are all supported. Use `--config <path>` to specify an explicit path, or `--no-config` to ignore all config files.
 
-## 🔧 System-wide Installation
-
-The exporter can be installed system-wide with systemd service integration.
-
-### ⚠️ Important: Running as Root
-
-For full system monitoring, herakles-node-exporter must run as **root** or with specific capabilities:
-
-#### Recommended: Run as Root
-
-```bash
-sudo herakles-node-exporter install
-```
-
-This ensures the exporter can:
-- Read `/proc/<pid>/smaps_rollup` for all processes (including root-owned)
-- Access eBPF maps in `/sys/fs/bpf/`
-- Monitor all system processes without permission errors
-
-The systemd service is configured to run as root with appropriate security capabilities.
-
-#### Check Requirements
-
-Before starting, verify your system meets all requirements:
-
-```bash
-herakles-node-exporter check-requirements --ebpf
-```
-
-Expected output:
-```
-🔍 Checking Runtime Requirements
-================================
-
-✅ Running as root (uid=0)
-✅ /proc access: Can read all processes
-✅ eBPF requirements validated
-✅ All requirements met - ready for production!
-```
-
-#### Troubleshooting Permission Issues
-
-If you see "Permission denied" errors in logs:
-
-1. **Check effective user**: `ps aux | grep herakles-node-exporter`
-2. **Should show**: `root ... herakles-node-exporter`
-3. **If not root**: The service will automatically run as root after a fresh install
-4. **Check logs**: `journalctl -u herakles-node-exporter -f`
-
-**Expected behavior:**
-- Service starts as root, does NOT drop privileges
-- Log shows: `ℹ️  User 'herakles' not found - continuing as root`
-- All 345+ processes are monitored successfully
-
-### Install
-
-The `install` command sets up a production-ready installation:
-
-```bash
-# Install system-wide (requires root)
-sudo herakles-node-exporter install
-
-# Install without starting the service
-sudo herakles-node-exporter install --no-service
-
-# Force reinstall over existing installation
-sudo herakles-node-exporter install --force
-```
-
-**Installation includes:**
-- Binary at `/opt/herakles/bin/herakles-node-exporter`
-- Configuration at `/etc/herakles/herakles-node-exporter.yaml`
-- systemd service at `/etc/systemd/system/herakles-node-exporter.service` (runs as root)
-- Runtime directories with proper permissions (owned by root)
-
-**After installation:**
-```bash
-# Check service status
-systemctl status herakles-node-exporter
-
-# View logs
-journalctl -u herakles-node-exporter -f
-
-# Access metrics
-curl http://localhost:9215/metrics
-```
-
-### Uninstall
-
-The `uninstall` command cleanly removes the installation:
-
-```bash
-# Uninstall (requires root, prompts for confirmation)
-sudo herakles-node-exporter uninstall
-
-# Uninstall without confirmation
-sudo herakles-node-exporter uninstall --yes
-```
-
-**Uninstallation removes:**
-- systemd service (stopped and disabled)
-- Binary from `/opt/herakles/bin/`
-- Configuration from `/etc/herakles/`
-- All installation directories (`/opt/herakles/`, `/var/lib/herakles/`, etc.)
-- BPF maps from `/sys/fs/bpf/herakles/`
-
-**Note:** No system user is created during installation, so nothing needs to be removed.
-
-## ⚙️ Configuration
-
-### Configuration File Locations
-
-The exporter searches for configuration files in the following order:
-1. CLI specified: `-c /path/to/config.yaml`
-2. Current directory: `./herakles-node-exporter.yaml`
-3. User config: `~/.config/herakles/config.yaml`
-4. System config: `/etc/herakles/config.yaml`
-
-### Minimal Configuration
+### Minimal configuration
 
 ```yaml
 port: 9215
@@ -531,498 +323,212 @@ bind: "0.0.0.0"
 cache_ttl: 30
 ```
 
-### Production Configuration
+### Production configuration
 
 ```yaml
-# Server settings
+# Server
 port: 9215
 bind: "0.0.0.0"
+cache_ttl: 30
 
-# Performance tuning
-cache_ttl: 60
+# Process filtering
+min_uss_kb: 0
 parallelism: 4
-io_buffer_kb: 256
-smaps_buffer_kb: 512
+max_processes: 2000
 
-# Metrics filtering
-min_uss_kb: 1024
-top_n_subgroup: 5
-top_n_others: 20
+# Metrics
+enable_rss: true
+enable_pss: true
+enable_uss: true
+enable_cpu: true
 
-# Classification
-search_mode: "include"
-search_groups:
-  - db
-  - web
-  - container
+# Group filtering (optional — include only these groups)
+# search_mode: "include"
+# search_groups: ["db", "web", "cache"]
+
+# Disable "other" group entirely
+disable_others: false
+top_n_subgroup: 3
+top_n_others: 10
+details_top_n: 5
 
 # Feature flags
 enable_health: true
 enable_telemetry: true
-log_level: "info"
-```
-
-### High-Performance Configuration
-
-```yaml
-port: 9215
-bind: "0.0.0.0"
-
-# Aggressive caching
-cache_ttl: 120
-
-# Parallel processing
-parallelism: 8
-
-# Limit cardinality
-top_n_subgroup: 3
-top_n_others: 10
-min_uss_kb: 10240
-
-# Disable optional features
+enable_default_collectors: true
 enable_pprof: false
+
+# Collectors
+enable_filesystem_collector: true
+enable_thermal_collector: true
+enable_psi_collector: true
+
+# eBPF
+enable_ebpf: true
+enable_ebpf_network: true
+enable_ebpf_disk: true
+enable_tcp_tracking: true
+
+# Ringbuffer (for /details historical data)
+ringsize:
+  max_memory_mb: 15
+  interval_seconds: 30
+  min_entries_per_subgroup: 10
+  max_entries_per_subgroup: 120
+
+# TLS (optional)
+enable_tls: false
+# tls_cert_path: "/etc/herakles/cert.pem"
+# tls_key_path: "/etc/herakles/key.pem"
+
+# Logging
+log_level: "info"
+enable_file_logging: false
 ```
 
-### Generate Configuration Template
+### Configuration fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `port` | `u16` | `9215` | HTTP listen port |
+| `bind` | `string` | `"0.0.0.0"` | Bind address |
+| `cache_ttl` | `u64` | `30` | Cache TTL in seconds |
+| `min_uss_kb` | `u64` | `0` | Minimum USS in KB to include process |
+| `include_names` | `[string]` | — | Include only processes with these names |
+| `exclude_names` | `[string]` | — | Exclude processes with these names |
+| `parallelism` | `usize` | auto | Rayon thread pool size (0 = auto) |
+| `max_processes` | `usize` | unlimited | Maximum processes to scan |
+| `io_buffer_kb` | `usize` | `256` | Buffer size for generic /proc reads |
+| `smaps_buffer_kb` | `usize` | `512` | Buffer size for /proc/<pid>/smaps |
+| `smaps_rollup_buffer_kb` | `usize` | `256` | Buffer size for /proc/<pid>/smaps_rollup |
+| `enable_health` | `bool` | `true` | Enable /health endpoint |
+| `enable_telemetry` | `bool` | `true` | Enable herakles_exporter_* self-metrics |
+| `enable_default_collectors` | `bool` | `true` | Enable generic system collectors |
+| `enable_pprof` | `bool` | `false` | Enable /debug/pprof endpoints |
+| `log_level` | `string` | `"info"` | Log level (off/error/warn/info/debug/trace) |
+| `enable_file_logging` | `bool` | `false` | Enable file logging |
+| `log_file` | `path` | — | Log file path |
+| `search_mode` | `string` | — | `"include"` or `"exclude"` for group filtering |
+| `search_groups` | `[string]` | — | Group names to include/exclude |
+| `search_subgroups` | `[string]` | — | Subgroup names to include/exclude |
+| `disable_others` | `bool` | `false` | Completely ignore `other`/`unknown` processes |
+| `top_n_subgroup` | `usize` | `3` | Top-N processes per subgroup (for /details) |
+| `top_n_others` | `usize` | `10` | Top-N processes for the `other` group |
+| `details_top_n` | `usize` | `5` | Top-N processes displayed in /details |
+| `enable_rss` | `bool` | `true` | Collect RSS memory metrics |
+| `enable_pss` | `bool` | `true` | Collect PSS memory metrics |
+| `enable_uss` | `bool` | `true` | Collect USS memory metrics |
+| `enable_cpu` | `bool` | `true` | Collect CPU metrics |
+| `test_data_file` | `path` | — | Use synthetic JSON data instead of /proc |
+| `enable_tls` | `bool` | `false` | Enable HTTPS |
+| `tls_cert_path` | `string` | — | Path to TLS certificate (PEM) |
+| `tls_key_path` | `string` | — | Path to TLS private key (PEM) |
+| `enable_ebpf` | `bool` | `true` | Enable eBPF subsystem |
+| `enable_ebpf_network` | `bool` | `true` | Enable eBPF network I/O tracking |
+| `enable_ebpf_disk` | `bool` | `true` | Enable eBPF disk I/O tracking |
+| `enable_filesystem_collector` | `bool` | `true` | Enable filesystem metrics collector |
+| `enable_thermal_collector` | `bool` | `true` | Enable thermal/temperature metrics collector |
+| `enable_psi_collector` | `bool` | `true` | Enable PSI (pressure stall) metrics collector |
+| `ringbuffer.max_memory_mb` | `usize` | `15` | Maximum total ringbuffer memory in MB |
+| `ringbuffer.interval_seconds` | `u64` | `30` | Ringbuffer sampling interval in seconds |
+| `ringbuffer.min_entries_per_subgroup` | `usize` | `10` | Minimum history entries per subgroup |
+| `ringbuffer.max_entries_per_subgroup` | `usize` | `120` | Maximum history entries per subgroup |
+
+---
+
+## eBPF Requirements
+
+The `ebpf` feature is compiled in by default (`default = ["ebpf"]` in `Cargo.toml`). It provides:
+
+- Per-process network I/O aggregation → `herakles_group_net_rx_bytes_total`, `herakles_group_net_tx_bytes_total`
+- Per-process block I/O aggregation → `herakles_group_blkio_*`
+- TCP connection state tracking → `herakles_system_tcp_connections_*`
+- eBPF performance self-metrics → `herakles_ebpf_*`
+
+### Kernel requirements
+
+- Kernel ≥ 4.18 (as required by `--enable-ebpf` flag description in `src/cli.rs`)
+- BTF (BPF Type Format) enabled: `/sys/kernel/btf/vmlinux` must exist
+- Required capabilities: `CAP_BPF`, `CAP_PERFMON` (or run as root)
+
+### Build-time dependencies (when compiling with `ebpf` feature)
+
+| Dependency | Purpose |
+|------------|---------|
+| `clang` | Compiles `src/ebpf/bpf/process_io.bpf.c` to BPF object code |
+| `bpftool` | Generates `vmlinux.h` from `/sys/kernel/btf/vmlinux` |
+| `libbpf-rs = "0.24"` | Rust bindings for libbpf (pulled by Cargo) |
+| `libbpf-sys = "1.4"` | C libbpf library (pulled by Cargo) |
+
+### Graceful degradation
+
+eBPF initialization failure is non-fatal. If `EbpfManager::new()` returns an error at startup, the exporter logs a warning (`⚠️ Failed to initialize eBPF: … - running without eBPF metrics`), increments the internal `ebpf_init_failures` counter, and continues running. All non-eBPF metrics remain fully functional. Check `/health` to see whether eBPF initialized successfully.
+
+### Troubleshooting
 
 ```bash
-# Generate YAML config with comments
-herakles-node-exporter config --format yaml --commented -o config.yaml
+# Check BTF availability
+ls -la /sys/kernel/btf/vmlinux
 
-# Generate minimal JSON config
-herakles-node-exporter config --format json -o config.json
+# Check required capabilities
+capsh --print | grep -E 'cap_bpf|cap_perfmon'
+
+# Check clang and bpftool
+clang --version
+bpftool version
+
+# Validate runtime requirements
+herakles-node-exporter check-requirements --ebpf
+
+# Check eBPF status via health endpoint
+curl http://localhost:9215/health
 ```
 
-## 🔒 SSL/TLS Configuration
+---
 
-The exporter supports HTTPS through TLS/SSL configuration.
+## Example PromQL Queries
 
-### Enable TLS via Configuration File
-
-```yaml
-# /etc/herakles/config.yaml
-port: 9215
-bind: "0.0.0.0"
-
-# TLS/SSL Configuration
-enable_tls: true
-tls_cert_path: "/etc/herakles/certs/server.crt"
-tls_key_path: "/etc/herakles/certs/server.key"
-```
-
-### Enable TLS via CLI
-
-```bash
-herakles-node-exporter \
-  --enable-tls \
-  --tls-cert /path/to/server.crt \
-  --tls-key /path/to/server.key
-```
-
-### Generate Self-Signed Certificate (Testing Only)
-
-```bash
-# Generate self-signed certificate
-openssl req -x509 -newkey rsa:4096 -nodes \
-  -keyout server.key -out server.crt \
-  -days 365 -subj "/CN=localhost"
-
-# Start exporter with TLS
-herakles-node-exporter \
-  --enable-tls \
-  --tls-cert server.crt \
-  --tls-key server.key
-```
-
-### Docker with TLS
-
-```bash
-docker run -d \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -v /path/to/certs:/certs:ro \
-  herakles-node-exporter \
-  --enable-tls \
-  --tls-cert /certs/server.crt \
-  --tls-key /certs/server.key
-```
-
-### Prometheus Configuration with HTTPS
-
-```yaml
-scrape_configs:
-  - job_name: 'herakles-proc-mem'
-    static_configs:
-      - targets: ['localhost:9215']
-    scrape_interval: 60s
-    scrape_timeout: 30s
-    scheme: https
-    tls_config:
-      # For self-signed certs (testing only):
-      # insecure_skip_verify: true
-      
-      # For private/custom CA certificates:
-      ca_file: /path/to/ca.crt
-```
-
-## 🔬 eBPF Configuration (Optional Advanced Feature)
-
-The exporter supports optional eBPF-based per-process I/O tracking for advanced monitoring scenarios. This feature requires special kernel support and is disabled by default.
-
-### Prerequisites
-
-1. **Linux Kernel**: >= 4.18 with BTF support
-2. **BTF**: `/sys/kernel/btf/vmlinux` must exist
-3. **Capabilities**: CAP_BPF + CAP_PERFMON (or run as root)
-4. **Build Tools** (compile time):
-   - clang >= 10
-   - llvm >= 10
-   - libbpf-dev
-   - linux-headers
-
-### Build with eBPF Support
-
-```bash
-# Install build dependencies (Ubuntu/Debian)
-sudo apt-get install clang llvm libbpf-dev linux-headers-$(uname -r)
-
-# Build with eBPF feature enabled
-cargo build --release --features ebpf
-
-# Or for development
-cargo build --features ebpf
-```
-
-### Enable eBPF via Configuration File
-
-```yaml
-# /etc/herakles/config.yaml
-port: 9215
-bind: "0.0.0.0"
-
-# eBPF Configuration
-enable_ebpf: true                  # Master eBPF enable switch
-enable_ebpf_network: true          # Enable per-process network I/O tracking
-enable_ebpf_disk: true             # Enable per-process disk I/O tracking
-enable_tcp_tracking: true          # Enable TCP connection state tracking
-```
-
-### Run with Required Capabilities
-
-```bash
-# Option 1: Run as root (not recommended for production)
-sudo herakles-node-exporter
-
-# Option 2: Grant specific capabilities (recommended)
-sudo setcap 'cap_bpf,cap_perfmon=+ep' /usr/local/bin/herakles-node-exporter
-herakles-node-exporter
-
-# Option 3: Run in Docker with capabilities
-docker run -d \
-  --name herakles-exporter \
-  --cap-add CAP_BPF \
-  --cap-add CAP_PERFMON \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -v /sys/kernel/btf:/sys/kernel/btf:ro \
-  herakles-node-exporter --enable-ebpf
-```
-
-### Verify eBPF Status
-
-```bash
-# Check if BTF is available
-ls -l /sys/kernel/btf/vmlinux
-
-# Check kernel version
-uname -r
-
-# Start with debug logging to see eBPF initialization
-herakles-node-exporter --log-level debug
-```
-
-### Graceful Degradation
-
-The exporter is designed to work without eBPF:
-- If eBPF initialization fails (old kernel, missing BTF, insufficient permissions), the exporter logs a warning and continues
-- All standard metrics (memory, CPU, system-level disk/network) continue to work normally
-- eBPF metrics are simply not exported when unavailable
-- No impact on performance or reliability of non-eBPF features
-
-### Current Implementation Status
-
-**✅ eBPF Integration Status**: The eBPF integration is **fully implemented**. The following features are active when the `ebpf` feature is compiled in and eBPF initializes successfully:
-- Real-time per-process network I/O tracking via `net_stats_map` (bytes RX/TX, packets, drops)
-- Real-time per-process block I/O tracking via `blkio_stats_map` (bytes read/write, syscall counts)
-- TCP connection state tracking via `tcp_state_map`
-- Aggregated I/O and network metrics per group/subgroup
-- eBPF performance self-monitoring (`herakles_ebpf_*` metrics)
-
-The eBPF programs are compiled from `src/ebpf/bpf/process_io.bpf.o` and embedded into the binary at build time.
-
-## 🏷️ Subgroups System
-
-The exporter automatically classifies processes into groups and subgroups for better organization and analysis.
-
-### Built-in Subgroups
-
-The exporter includes 140+ predefined subgroups covering:
-
-| Group | Subgroups |
-|-------|-----------|
-| `db` | postgres, mysql, mongodb, oracle, cassandra, redis, clickhouse, etc. |
-| `web` | nginx, apache, tomcat, caddy, weblogic, websphere, etc. |
-| `container` | docker, containerd, kubelet, podman, crio |
-| `monitoring` | prometheus, grafana, alertmanager, zabbix, etc. |
-| `backup` | veeam, bacula, netbackup, commvault, etc. |
-| `messaging` | kafka, rabbitmq, activemq, nats, etc. |
-| `logging` | elasticsearch, logstash, splunk, graylog, etc. |
-| `system` | systemd, sshd, cron, postfix, etc. |
-
-### List Available Subgroups
-
-```bash
-# List all subgroups
-herakles-node-exporter subgroups
-
-# Filter by group
-herakles-node-exporter subgroups --group db
-
-# Show detailed matching rules
-herakles-node-exporter subgroups --verbose
-```
-
-### Custom Subgroups
-
-Create custom subgroups by adding a `subgroups.toml` file:
-
-**Location precedence:**
-1. `./subgroups.toml` (current directory)
-2. `/etc/herakles/subgroups.toml` (system-wide)
-
-**Example custom subgroups:**
-
-```toml
-subgroups = [
-  { group = "myapp", subgroup = "api", matches = ["myapp-api", "api-server"] },
-  { group = "myapp", subgroup = "worker", matches = ["myapp-worker", "job-processor"] },
-  { group = "myapp", subgroup = "frontend", cmdline_matches = ["node.*myapp-frontend"] },
-]
-```
-
-## 🔌 HTTP Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /metrics` | Prometheus metrics endpoint |
-| `GET /health` | Health check with internal stats |
-| `GET /config` | Current configuration (HTML) |
-| `GET /subgroups` | Loaded subgroups (HTML) |
-| `GET /doc` | Documentation in plain text format |
-
-## 📖 Quick Documentation Access
-
-View the complete documentation directly from the command line:
-
-```bash
-curl http://localhost:9215/doc
-```
-
-This provides a quick reference for:
-- Available endpoints
-- Metrics overview
-- Configuration options
-- Example PromQL queries
-- CLI commands
-
-### Prometheus Scrape Configuration
-
-```yaml
-scrape_configs:
-  - job_name: 'herakles-proc-mem'
-    static_configs:
-      - targets: ['localhost:9215']
-    scrape_interval: 60s
-    scrape_timeout: 30s
-```
-
-## 🧪 Testing
-
-### Test Mode
-
-```bash
-# Run single test iteration
-herakles-node-exporter test
-
-# Run multiple iterations with verbose output
-herakles-node-exporter test -n 5 --verbose
-```
-
-### Generate Synthetic Test Data
-
-```bash
-# Generate test data file
-herakles-node-exporter generate-testdata -o testdata.json
-
-# Run exporter with test data
-herakles-node-exporter -t testdata.json
-```
-
-### Verify Installation
-
-```bash
-# Check system requirements
-herakles-node-exporter check --all
-
-# Validate configuration
-herakles-node-exporter --check-config
-
-# Test metrics endpoint
-curl http://localhost:9215/metrics | head -50
-```
-
-## 🐳 Docker Compose
-
-```yaml
-version: '3.8'
-
-services:
-  herakles-exporter:
-    image: herakles-node-exporter:latest
-    container_name: herakles-exporter
-    ports:
-      - "9215:9215"
-    volumes:
-      - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/config.yaml:ro
-    environment:
-      - RUST_LOG=info
-    restart: unless-stopped
-    
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    depends_on:
-      - herakles-exporter
-```
-
-## 🔧 Systemd Service
-
-```ini
-[Unit]
-Description=Herakles Process Memory Exporter
-After=network.target
-
-[Service]
-Type=simple
-User=prometheus
-ExecStart=/usr/bin/herakles-node-exporter -c /etc/herakles/config.yaml
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-# Enable and start service
-sudo systemctl enable herakles-node-exporter
-sudo systemctl start herakles-node-exporter
-sudo systemctl status herakles-node-exporter
-```
-
-## 📈 Example PromQL Queries
-
-### Process Metrics
 ```promql
-# Top 10 processes by USS memory
-topk(10, herakles_mem_process_uss_bytes)
+# RSS memory by subgroup — all postgres processes across all hosts
+herakles_group_memory_rss_bytes{subgroup="postgres"}
 
-# Memory usage by group
-sum by (group) (herakles_mem_process_rss_bytes)
+# PSS memory by group — deduplicates shared memory contributions
+herakles_group_memory_pss_bytes{group="db"}
 
-# CPU usage by subgroup
-sum by (group, subgroup) (herakles_cpu_process_usage_percent)
+# Disk read throughput per group (bytes/sec, 5-min rate)
+rate(herakles_group_blkio_read_bytes_total[5m])
 
-# Memory growth rate (per minute)
-rate(herakles_mem_process_rss_bytes[5m]) * 60
-
-# Process count per subgroup
-count by (group, subgroup) (herakles_mem_process_uss_bytes)
-```
-
-### Disk I/O Metrics
-```promql
-# Disk read/write rate in bytes per second
-rate(herakles_system_disk_read_bytes_total[5m])
+# Disk write throughput per block device
 rate(herakles_system_disk_write_bytes_total[5m])
 
-# Disk I/O utilization (percentage of time with I/O in progress)
-rate(herakles_system_disk_io_time_seconds_total[5m]) * 100
+# Filesystem usage percentage per mount point
+1 - (herakles_system_filesystem_avail_bytes / herakles_system_filesystem_size_bytes)
 
-# Current I/O queue depth per device
-herakles_system_disk_queue_depth
-```
-
-### Filesystem Metrics
-```promql
-# Filesystem usage percentage
-(herakles_system_filesystem_size_bytes - herakles_system_filesystem_avail_bytes) / herakles_system_filesystem_size_bytes * 100
-
-# Filesystem available space in GB
-herakles_system_filesystem_avail_bytes / 1024 / 1024 / 1024
-
-# Filesystems with less than 10% available space
-(herakles_system_filesystem_avail_bytes / herakles_system_filesystem_size_bytes) < 0.1
-
-# Inode usage percentage
-(herakles_system_filesystem_files - herakles_system_filesystem_files_free) / herakles_system_filesystem_files * 100
-```
-
-### Network Metrics
-```promql
-# Network traffic rate in bytes per second
+# Network receive throughput per interface (bytes/sec)
 rate(herakles_system_net_rx_bytes_total[5m])
-rate(herakles_system_net_tx_bytes_total[5m])
 
-# Network error rate
-rate(herakles_system_net_rx_errors_total[5m])
-rate(herakles_system_net_tx_errors_total[5m])
-
-# Network drop rate (by direction)
-rate(herakles_system_net_drops_total[5m])
-
-# Total network bandwidth usage
-sum(rate(herakles_system_net_rx_bytes_total[5m])) + 
-  sum(rate(herakles_system_net_tx_bytes_total[5m]))
-```
-
-### Group Metrics
-```promql
-# Memory usage aggregated per subgroup
-herakles_group_memory_rss_bytes
-
-# CPU usage aggregated per subgroup
-herakles_group_cpu_usage_ratio
-
-# Block I/O per subgroup
-rate(herakles_group_blkio_read_bytes_total[5m])
-rate(herakles_group_blkio_write_bytes_total[5m])
-
-# Network I/O per subgroup (requires eBPF)
-rate(herakles_group_net_rx_bytes_total[5m])
+# Network transmit throughput per process group (eBPF)
 rate(herakles_group_net_tx_bytes_total[5m])
+
+# CPU PSI stall rate — fraction of time stalled waiting for CPU
+rate(herakles_system_cpu_psi_wait_seconds_total[5m])
+
+# Memory PSI stall rate
+rate(herakles_system_memory_psi_wait_seconds_total[5m])
+
+# I/O PSI stall rate
+rate(herakles_system_disk_psi_wait_seconds_total[5m])
+
+# Alert: system memory pressure above 90%
+herakles_system_memory_used_ratio > 0.9
 ```
 
+---
 
-## 🔧 CLI Reference
+## CLI Reference
 
 ```
-herakles-node-exporter [OPTIONS] [COMMAND]
+Usage: herakles-node-exporter [OPTIONS] [COMMAND]
 
 Commands:
   check               Validate configuration and system requirements
@@ -1030,198 +536,121 @@ Commands:
   test                Test metrics collection
   subgroups           List available process subgroups
   generate-testdata   Generate synthetic test data JSON file
-
-Options:
-  -p, --port <PORT>                  HTTP listen port
-      --bind <BIND>                  Bind to specific interface/IP
-      --log-level <LOG_LEVEL>        Log level [default: info]
-  -c, --config <CONFIG>              Config file (YAML/JSON/TOML)
-      --no-config                    Disable all config file loading
-      --show-config                  Print effective merged config and exit
-      --show-user-config             Print loaded user config file and exit
-      --config-format <FORMAT>       Output format for --show-config* [default: yaml]
-      --check-config                 Validate config and exit
-      --cache-ttl <SECONDS>          Cache metrics for N seconds
-      --min-uss-kb <KB>              Minimum USS in KB to include process
-      --top-n-subgroup <N>           Top-N processes per subgroup
-      --top-n-others <N>             Top-N processes for "other" group
-  -t, --test-data-file <FILE>        Path to JSON test data file
-      --enable-tls                   Enable HTTPS/TLS
-      --tls-cert <FILE>              Path to TLS certificate (PEM)
-      --tls-key <FILE>               Path to TLS private key (PEM)
-      --enable-ebpf                  Enable eBPF-based per-process I/O tracking
-      --enable-ebpf-network          Enable eBPF-based per-process network I/O tracking
-      --disable-ebpf-network         Disable eBPF-based per-process network I/O tracking
-      --enable-ebpf-disk             Enable eBPF-based per-process disk I/O tracking
-      --disable-ebpf-disk            Disable eBPF-based per-process disk I/O tracking
-      --enable-tcp-tracking          Enable TCP connection state tracking via eBPF
-      --disable-tcp-tracking         Disable TCP connection state tracking via eBPF
-  -h, --help                         Print help
-  -V, --version                      Print version
+  install             Install system-wide with systemd service
+  uninstall           Uninstall system-wide installation
+  check-requirements  Check runtime requirements and permissions
+  help                Print this message or the help of the given subcommand(s)
 ```
 
-## 🔍 eBPF Troubleshooting
+### Flags
 
-### Common eBPF Issues and Solutions
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--port <PORT>` | `-p` | — | HTTP listen port |
+| `--bind <BIND>` | — | — | Bind to specific interface/IP |
+| `--log-level <LEVEL>` | — | `info` | Log level: off, error, warn, info, debug, trace |
+| `--config <FILE>` | `-c` | — | Config file (YAML/JSON/TOML) |
+| `--no-config` | — | false | Disable all config file loading |
+| `--show-config` | — | false | Print effective merged config and exit |
+| `--show-user-config` | — | false | Print only the loaded user config file + full path and exit |
+| `--config-format <FMT>` | — | `yaml` | Output format for --show-config*: yaml, json, toml |
+| `--check-config` | — | false | Validate config and exit (return code 1 on error) |
+| `--debug` | — | false | Enable /debug/pprof endpoints |
+| `--cache-ttl <SECS>` | — | — | Cache metrics for N seconds |
+| `--disable-health` | — | false | Disable /health endpoint + health metrics |
+| `--disable-telemetry` | — | false | Disable internal exporter_* metrics |
+| `--disable-default-collectors` | — | false | Disable generic collectors |
+| `--io-buffer-kb <KB>` | — | — | Override IO buffer size (KB) for generic /proc readers |
+| `--smaps-buffer-kb <KB>` | — | — | Override buffer size (KB) for /proc/<pid>/smaps |
+| `--smaps-rollup-buffer-kb <KB>` | — | — | Override buffer size (KB) for /proc/<pid>/smaps_rollup |
+| `--min-uss-kb <KB>` | — | — | Minimum USS in KB to include process |
+| `--include-names <NAMES>` | — | — | Include only processes matching these names (comma-separated) |
+| `--exclude-names <NAMES>` | — | — | Exclude processes matching these names (comma-separated) |
+| `--parallelism <N>` | — | — | Parallel processing threads (0 = auto) |
+| `--max-processes <N>` | — | — | Maximum number of processes to scan |
+| `--top-n-subgroup <N>` | — | — | Top-N processes to export per subgroup (override config) |
+| `--top-n-others <N>` | — | — | Top-N processes to export for "other" group (override config) |
+| `--test-data-file <FILE>` | `-t` | — | Path to JSON test data file (uses synthetic data instead of /proc) |
+| `--enable-tls` | — | false | Enable TLS/SSL for HTTPS |
+| `--tls-cert <FILE>` | — | — | Path to TLS certificate file (PEM format) |
+| `--tls-key <FILE>` | — | — | Path to TLS private key file (PEM format) |
+| `--enable-ebpf` | — | false | Enable eBPF-based I/O tracking (requires kernel ≥ 4.18, BTF, CAP_BPF/CAP_PERFMON) |
+| `--enable-ebpf-network` | — | false | Enable eBPF-based network I/O tracking |
+| `--disable-ebpf-network` | — | false | Disable eBPF-based network I/O tracking (conflicts with --enable-ebpf-network) |
+| `--enable-ebpf-disk` | — | false | Enable eBPF-based disk I/O tracking |
+| `--disable-ebpf-disk` | — | false | Disable eBPF-based disk I/O tracking (conflicts with --enable-ebpf-disk) |
+| `--enable-tcp-tracking` | — | false | Enable TCP connection state tracking via eBPF |
+| `--disable-tcp-tracking` | — | false | Disable TCP connection state tracking via eBPF (conflicts with --enable-tcp-tracking) |
 
-**1. eBPF fails to initialize**
+---
 
-Check the logs for specific errors:
-```bash
-# Look for eBPF initialization messages
-herakles-node-exporter | grep -i ebpf
+## Systemd Service
+
+```ini
+[Unit]
+Description=Herakles Node Exporter
+Documentation=https://github.com/cansp-dev/herakles-node-exporter
+After=network.target
+
+[Service]
+Type=simple
+# Root is required to read /proc/<pid>/smaps_rollup for processes owned by other users.
+# After eBPF initialization, the process will attempt to drop privileges to the
+# 'herakles' system user if it exists. If 'herakles' user is not present, the
+# process continues as root (recommended for full system monitoring).
+User=root
+ExecStart=/usr/local/bin/herakles-node-exporter
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening (compatible with /proc access)
+ProtectSystem=strict
+ReadOnlyPaths=/proc
+PrivateTmp=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-Common causes:
-- **Missing BTF support**: Verify `/sys/kernel/btf/vmlinux` exists
-  ```bash
-  ls -lh /sys/kernel/btf/vmlinux
-  # If missing: rebuild kernel with CONFIG_DEBUG_INFO_BTF=y
-  ```
+> **Why root?** Reading `/proc/<pid>/smaps_rollup` for processes owned by other users requires root privileges. The exporter reads this file to obtain accurate USS (Unique Set Size) figures. After eBPF programs are loaded and pinned, the process attempts to drop to the `herakles` system user if it exists — see `drop_privileges()` in `src/main.rs`. If the `herakles` user does not exist, the process continues as root, which is the recommended production configuration for full multi-user system monitoring.
 
-- **Insufficient permissions**: Run with CAP_BPF + CAP_PERFMON or root
-  ```bash
-  # As root
-  sudo herakles-node-exporter --enable-ebpf
-  
-  # Or with capabilities
-  sudo setcap cap_bpf,cap_perfmon=ep /usr/local/bin/herakles-node-exporter
-  herakles-node-exporter --enable-ebpf
-  ```
+---
 
-- **Old kernel**: Requires Linux >= 4.18 for BTF support
-  ```bash
-  uname -r
-  # Upgrade if kernel version < 4.18
-  ```
+## Docker Compose
 
-**2. Build fails with eBPF feature**
-
-Ensure all build dependencies are installed:
-```bash
-# Ubuntu/Debian
-sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r) bpftool
-
-# Fedora/RHEL
-sudo dnf install -y clang llvm libbpf-devel kernel-devel bpftool
-
-# Arch Linux
-sudo pacman -S clang llvm libbpf linux-headers bpf
-```
-
-**3. eBPF metrics are missing**
-
-Verify eBPF is enabled in configuration:
 ```yaml
-enable_ebpf: true
+services:
+  herakles-node-exporter:
+    image: herakles-node-exporter:latest
+    container_name: herakles-node-exporter
+    pid: host
+    volumes:
+      - /proc:/proc:ro
+    ports:
+      - "9215:9215"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9215/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 ```
 
-Check the `/health` endpoint for eBPF status:
-```bash
-curl http://localhost:9215/health | grep -i ebpf
-```
+---
 
-**4. Performance issues with eBPF**
+## License
 
-Monitor eBPF performance statistics via `/health` endpoint:
-- `events_per_sec`: Event processing rate
-- `map_usage_percent`: BPF map utilization
-- `lost_events`: Events dropped due to buffer overruns
+Licensed under either of
 
-If overhead is too high, consider:
-- Disabling specific eBPF features (e.g., `disable-ebpf-network`)
-- Reducing `top_n_subgroup` to limit per-process tracking
-- Increasing system resources
-
-## 📚 Documentation
-
-For detailed documentation, see the [Wiki](wiki/Home.md):
-
-- [Installation Guide](wiki/Installation.md)
-- [Configuration Reference](wiki/Configuration.md)
-- [Metrics Overview](wiki/Metrics-Overview.md)
-- [Top Process Metrics](wiki/Top-Process-Metrics.md) - **Detailed guide for top-N resource metrics**
-- [Subgroups System](wiki/Subgroups-System.md)
-- [Prometheus Integration](wiki/Prometheus-Integration.md)
-- [Performance Tuning](wiki/Performance-Tuning.md)
-- [Alerting Examples](wiki/Alerting-Examples.md)
-- [Troubleshooting](wiki/Troubleshooting.md)
-- [Architecture](wiki/Architecture.md)
-- [Contributing](wiki/Contributing.md)
-
-## 🔧 Buffer Health Monitoring API
-
-The library provides a health monitoring API for tracking internal buffer fill levels. This allows users to monitor buffer usage and make informed decisions about buffer sizing.
-
-### Usage
-
-```rust
-use herakles_node_exporter::{AppConfig, BufferHealthConfig, HealthState};
-
-// Create configuration with custom thresholds
-let config = AppConfig {
-    io_buffer: BufferHealthConfig {
-        capacity_kb: 256,
-        larger_is_better: false,  // Lower fill is better
-        warn_percent: Some(80.0),
-        critical_percent: Some(95.0),
-    },
-    smaps_buffer: BufferHealthConfig {
-        capacity_kb: 512,
-        larger_is_better: false,
-        warn_percent: Some(80.0),
-        critical_percent: Some(95.0),
-    },
-    smaps_rollup_buffer: BufferHealthConfig {
-        capacity_kb: 256,
-        larger_is_better: false,
-        warn_percent: Some(80.0),
-        critical_percent: Some(95.0),
-    },
-};
-
-// Create health state
-let health_state = HealthState::new(config);
-
-// Update buffer values as they change
-health_state.update_io_buffer_kb(100);
-health_state.update_smaps_buffer_kb(200);
-health_state.update_smaps_rollup_buffer_kb(50);
-
-// Get current health status
-let response = health_state.get_health();
-println!("Overall status: {}", response.overall_status);
-
-for buffer in &response.buffers {
-    println!("{}: {:.1}% ({})", buffer.name, buffer.fill_percent, buffer.status);
-}
-```
-
-### Feature Flags
-
-- `health-actix`: Enables actix-web integration for exposing health endpoints via HTTP
-
-```bash
-# Build with actix-web support
-cargo build --features health-actix
-
-# Run the health server example
-cargo run --example health_server --features health-actix
-```
-
-## 📄 License
-
-This project is dual-licensed under either:
-
-- MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT License ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
-## 👥 Authors
+---
 
-- Michael Moll <exporter@herakles.now> - [Herakles](https://herakles.now)
+## Author
 
-## 🔗 Project & Support
-
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Michael Moll <exporter@herakles.now> — Herakles
