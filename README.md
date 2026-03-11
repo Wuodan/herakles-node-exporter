@@ -1,92 +1,136 @@
 # Herakles Node Exporter
 
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
-[![Prometheus](https://img.shields.io/badge/prometheus-compatible-red.svg)](https://prometheus.io)
+[![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-MIT)
+[![Prometheus](https://img.shields.io/badge/prometheus-compatible-red)](https://prometheus.io/)
 
-A Prometheus exporter for Linux system metrics that aggregates per-process resource usage into named process groups, exposing clean group-level time series without per-PID cardinality.
-
----
-
-## Why Herakles?
-
-Most process-aware Prometheus exporters expose per-PID label dimensions. This causes two well-understood problems: label cardinality explodes as processes restart and accumulate new PIDs, and the resulting time series are too fine-grained to be actionable in alert rules. An alert that fires on `process{pid="12345"}` is operationally useless because the PID changes every restart and the label set varies across hosts.
-
-Herakles solves this by classifying every running process into a named (`group`, `subgroup`) pair at scrape time. The metrics at `/metrics` carry only these two stable label dimensions — never a PID, never a raw command name. `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"}` means the same thing on every host and survives any number of postgres restarts without any stale series accumulation. This makes it safe to write recording rules and multi-host federation queries over group metrics without cardinality concerns.
-
-The human operator, however, needs the opposite: when an alert fires on `herakles_group_memory_rss_bytes`, they want to know _which_ postgres process is responsible. For this, `/details` and `/html/details` intentionally expose high-cardinality data — PIDs, USS per process, CPU percentages — that would be unsafe in Prometheus but are perfectly appropriate in a forensic endpoint that is read by humans or automation on demand, never scraped continuously. This separation is architectural: the Prometheus scrape path and the operator inspection path are different endpoints with different contracts.
-
-The cache model follows from the same reasoning. `/metrics` serves data from an in-memory cache that is refreshed on-demand at most every 5 seconds (`CACHE_UPDATE_THROTTLE_SECS`). This means a Prometheus scrape never blocks on `/proc` I/O: the scrape handler reads from cache, while a background tokio task asynchronously updates it. The cost is that metrics may lag by up to one cache TTL — an acceptable trade-off for a monitoring system where staleness on the order of seconds is irrelevant.
-
-The `group`/`subgroup` classification is implemented as a static lookup table compiled from `data/subgroups.toml`. Process names that match no entry fall into `{group="other", subgroup="unknown"}`. Custom rules can be added to the TOML without modifying source code.
+A Prometheus exporter for Linux system metrics that aggregates per-process resource usage into named process groups — exposing stable, cardinality-safe time series at `/metrics` and full per-process forensic detail at `/html/details`.
 
 ---
 
-## The Endpoint Architecture
+## What it does
 
-Herakles exposes two distinct categories of HTTP endpoint: machine-readable endpoints designed for Prometheus and automation, and human-readable endpoints designed for operator inspection.
+Herakles scrapes `/proc` on every request, classifies each running process into a `(group, subgroup)` pair using a static lookup table, and exposes two fundamentally different views of that data:
+
+- **`/metrics`** — Prometheus scrape endpoint. All process data is aggregated into `(group, subgroup)` pairs before encoding. No PID labels, no process name labels. Safe to scrape continuously at any interval.
+- **`/html/details`** — Operator inspection endpoint. Full per-process breakdown with PIDs, USS, CPU%, I/O rates, and temporal anomaly classification. Intentionally not scraped by Prometheus.
+
+The separation is architectural and deliberate. See [Why this architecture?](#why-this-architecture) for the reasoning.
+
+---
+
+## Quick Start
+
+```bash
+# Clone and build (eBPF enabled by default)
+git clone https://github.com/cansp-dev/herakles-node-exporter.git
+cd herakles-node-exporter
+make release
+
+# Run (root required for full /proc coverage)
+sudo ./binary/herakles-node-exporter
+
+# Verify
+curl http://localhost:9215/metrics | grep herakles_group_memory_rss
+curl http://localhost:9215/html/details
+```
+
+Prometheus scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: 'herakles'
+    static_configs:
+      - targets: ['localhost:9215']
+    scrape_interval: 60s
+    scrape_timeout: 30s
+```
+
+---
+
+## Why this architecture?
+
+Most process-aware exporters expose per-PID label dimensions. This causes two well-understood problems: label cardinality explodes as processes restart and accumulate new PIDs, and the resulting time series are too fine-grained to be actionable in alert rules. An alert that fires on `process{pid="12345"}` is operationally useless — the PID changes every restart and the label set varies across hosts.
+
+Herakles solves this by classifying every running process into a named `(group, subgroup)` pair at scrape time. `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"}` means the same thing on every host and survives any number of postgres restarts without stale series accumulation. This makes it safe to write recording rules and multi-host federation queries over group metrics without cardinality concerns.
+
+The human operator, however, needs the opposite: when an alert fires on `herakles_group_memory_rss_bytes`, they want to know *which* postgres process is responsible. For this, `/html/details` intentionally exposes high-cardinality data — PIDs, USS per process, CPU percentages — that would be unsafe in Prometheus but are perfectly appropriate for a forensic endpoint read by humans or automation on demand, never scraped continuously.
+
+**The cache model follows from the same reasoning.** `/metrics` serves data from an in-memory cache refreshed at most every 5 seconds (`CACHE_UPDATE_THROTTLE_SECS`). A Prometheus scrape never blocks on `/proc` I/O: the scrape handler reads from cache while a background tokio task asynchronously updates it. Staleness on the order of seconds is irrelevant for a monitoring system.
+
+---
+
+## The Endpoints
 
 ### `/metrics` — Prometheus scrape target
 
-`GET /metrics` returns the full metric set in Prometheus text exposition format. This is the only endpoint that Prometheus should scrape. It contains no per-PID labels; all process-level data has been aggregated into `(group, subgroup)` pairs before encoding. On each request, the handler checks whether the cache is stale (older than 5 seconds) and, if so, spawns a background task to refresh it, then immediately returns the current cached data. Scrape latency is therefore bounded by lock acquisition time, not `/proc` scan time.
+Returns the full metric set in Prometheus text exposition format. No per-PID labels anywhere. All process-level data has been aggregated into `(group, subgroup)` pairs before encoding. Scrape latency is bounded by lock acquisition time, not `/proc` scan time.
 
-The intended usage pattern: configure Prometheus to scrape `http://<host>:9215/metrics`. When an alert fires — for example, `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"} > 8e9` — open `/html/details?subgroup=postgres` on the affected host to find which individual postgres process is responsible.
+**Operational pattern:** Configure Prometheus to scrape this endpoint. Write alerts on group metrics. When an alert fires — e.g. `herakles_group_memory_rss_bytes{group="db",subgroup="postgres"} > 8e9` — open `/html/details?subgroup=postgres` on the affected host to identify the responsible process.
 
-### `/details` and `/html/details` — Forensic process view
+### `/html/details` — Forensic process view
 
-`GET /details` (plain text) and `GET /html/details` (HTML) expose per-process data from the in-memory cache. Both endpoints accept a `?subgroup=<name>` query parameter to filter by subgroup. The details handler implements temporal zone classification: processes younger than 5 minutes are in the `Live` phase, 5–60 minutes in `Stabilization`, and older than 60 minutes in `Historical`. For each phase, the handler computes anomaly severity based on deviation from a rolling baseline, surfacing processes whose memory or CPU consumption is growing unexpectedly.
+Full per-process breakdown from the in-memory cache. Accepts a `?subgroup=<name>` query parameter to filter by subgroup. This is where you go after an alert fires.
 
-This data is intentionally not in `/metrics` because it contains PIDs and per-process metrics that are high-cardinality and change with every restart. The details endpoints are for human operators and automated runbooks, not continuous Prometheus scraping.
+Beyond a simple process list, `/html/details` implements **temporal zone classification**: each process is assigned to one of three phases based on how long it has been running.
 
-**Workflow**: alert fires on group metric → open `/html/details?subgroup=<name>` to identify the responsible process → examine PID, USS, CPU, and I/O rates → act.
+| Phase | Age | What it means |
+|---|---|---|
+| Live | < 5 minutes | Recently started; baseline not yet established |
+| Stabilization | 5 – 60 minutes | Settling; compare against short-term baseline |
+| Historical | > 60 minutes | Stable; anomalies here are genuinely unexpected |
 
-### Other endpoints
+Within each phase, the handler computes anomaly severity based on deviation from a rolling baseline, surfacing processes whose memory or CPU consumption is growing unexpectedly. A postgres process in the Historical phase consuming 3× its normal RSS is flagged prominently. A freshly started process consuming the same amount is not — it hasn't had time to establish a baseline.
+
+A plain-text variant is available at `/details` with the same filtering and classification logic.
+
+### Supporting endpoints
 
 | Method | Path | Audience | Description |
-|--------|------|----------|-------------|
-| GET | `/` | Human | HTML landing page with all endpoint links and exporter uptime |
-| GET | `/health` | Both | Plain-text health check; returns HTTP 200 if cache is valid, 503 otherwise |
-| GET | `/config` | Human/Automation | Current effective configuration in plain text |
-| GET | `/subgroups` | Human/Automation | All loaded (group, subgroup) pairs with their process name patterns |
+|---|---|---|---|
+| GET | `/` | Human | HTML landing page with endpoint index and exporter uptime |
+| GET | `/health` | Both | Plain-text health check; HTTP 200 if cache valid, 503 otherwise |
+| GET | `/config` | Human/Automation | Effective configuration in plain text |
+| GET | `/subgroups` | Human/Automation | All loaded `(group, subgroup)` pairs with their match patterns |
 | GET | `/doc` | Human | Inline plain-text documentation |
-| GET | `/docs` | Human | HTML documentation |
 | GET | `/html` | Human | HTML index |
-| GET | `/html/subgroups` | Human | HTML view of subgroup classification table |
+| GET | `/html/subgroups` | Human | HTML view of the subgroup classification table |
 | GET | `/html/health` | Human | HTML view of health and buffer statistics |
 | GET | `/html/config` | Human | HTML view of current configuration |
 | GET | `/html/docs` | Human | HTML documentation |
+| GET | `/docs` | Human | HTML documentation (alias) |
 
 ---
 
 ## Process Classification
 
-Every process that appears in `/proc` is classified into a `(group, subgroup)` pair by matching its executable name against the entries in `data/subgroups.toml`. The matching logic checks `matches` (process name prefixes) and `cmdline_matches` (command-line substrings). A process that matches no entry is assigned `{group="other", subgroup="unknown"}`.
+Every process in `/proc` is classified into a `(group, subgroup)` pair by matching its executable name against `data/subgroups.toml`. The matching logic checks `matches` (process name prefixes against `/proc/<pid>/comm`) and `cmdline_matches` (substrings against the full command line, useful for JVM processes where `comm` is always `java`). A process matching no entry is assigned `{group="other", subgroup="unknown"}`.
 
-The built-in groups and their subgroups are:
+### Built-in groups
 
 | Group | Subgroups |
-|-------|-----------|
-| `backup` | bacula, commvault, cohesity, netbackup, networker, rubrik, spectrum_protect, tsm, veeam |
-| `cache` | memcached, redis, varnish |
-| `cicd` | ansible, chef, gitlab, jenkins, openstack, puppet, saltstack, terraform |
-| `container` | containerd, crio, docker, kubelet, podman |
-| `db` | cassandra, clickhouse, cockroachdb, couchbase, couchdb, db2, influxdb, mongodb, mssql, mysql, oracle, percona, postgres, rethinkdb, timescaledb, yugabyte |
-| `erp` | peoplesoft, sap |
-| `logging` | elasticsearch, filebeat, fluentd, graylog, kibana, log_collectors, logstash, splunk |
-| `messaging` | activemq, kafka, nats, nsq, pulsar, rabbitmq, zeromq |
-| `monitoring` | alertmanager, blackbox, grafana, icinga_nagios, node_exporter, percona, prometheus, snmp, telegraf, thanos, victoriametrics, zabbix |
-| `network` | bind, dhcp, haproxy, keepalived, lvs, ntp, proxy_squid, vpn |
-| `runtime` | go, java, nodejs, php, python, ruby |
-| `security` | audit_tools, freeipa, kerberos_client, keycloak, ldap_client, osquery, selinux_apparmor, snort, sssd, suricata, vault, wazuh, zeek |
-| `storage` | ceph, drbd, gluster, iscsi, lustre, minio, nfs, samba |
-| `system` | audit, cron, firewall, kernel, postfix, rsyslog, sendmail, ssh, systemd |
-| `virtualization` | libvirt, qemu, vbox |
-| `web` | apache, caddy, glassfish, jetty, nginx, springboot, tomcat, weblogic, websphere |
-| `other` | unknown (fallback for unclassified processes) |
+|---|---|
+| backup | bacula, commvault, cohesity, netbackup, networker, rubrik, spectrum_protect, tsm, veeam |
+| cache | memcached, redis, varnish |
+| cicd | ansible, chef, gitlab, jenkins, openstack, puppet, saltstack, terraform |
+| container | containerd, crio, docker, kubelet, podman |
+| db | cassandra, clickhouse, cockroachdb, couchbase, couchdb, db2, influxdb, mongodb, mssql, mysql, oracle, percona, postgres, rethinkdb, timescaledb, yugabyte |
+| erp | peoplesoft, sap |
+| logging | elasticsearch, filebeat, fluentd, graylog, kibana, log_collectors, logstash, splunk |
+| messaging | activemq, kafka, nats, nsq, pulsar, rabbitmq, zeromq |
+| monitoring | alertmanager, blackbox, grafana, icinga_nagios, node_exporter, percona, prometheus, snmp, telegraf, thanos, victoriametrics, zabbix |
+| network | bind, dhcp, haproxy, keepalived, lvs, ntp, proxy_squid, vpn |
+| runtime | go, java, nodejs, php, python, ruby |
+| security | audit_tools, freeipa, kerberos_client, keycloak, ldap_client, osquery, selinux_apparmor, snort, sssd, suricata, vault, wazuh, zeek |
+| storage | ceph, drbd, gluster, iscsi, lustre, minio, nfs, samba |
+| system | audit, cron, firewall, kernel, postfix, rsyslog, sendmail, ssh, systemd |
+| virtualization | libvirt, qemu, vbox |
+| web | apache, caddy, glassfish, jetty, nginx, springboot, tomcat, weblogic, websphere |
+| other | unknown (fallback for all unclassified processes) |
 
 ### Custom subgroups
 
-The classification table is defined in `data/subgroups.toml`. Each entry follows this structure:
+Add entries to `data/subgroups.toml` without modifying source code:
 
 ```toml
 subgroups = [
@@ -103,12 +147,16 @@ subgroups = [
 ]
 ```
 
-- `group` — coarse category, appears as the `group` label in Prometheus
-- `subgroup` — specific service name, appears as the `subgroup` label
-- `matches` — list of process name prefixes (matched against `/proc/<pid>/comm`)
-- `cmdline_matches` — list of substrings matched against the full command line (useful for JVM processes where `comm` is always `java`)
+`cmdline_matches` is the right tool for JVM-based services where `/proc/<pid>/comm` is always `java` — match on the main class or startup script instead.
 
-To control which groups are active at runtime, use `search_mode`, `search_groups`, and `search_subgroups` in the configuration file.
+File search order: `./subgroups.toml` → `/etc/herakles/subgroups.toml`.
+
+List loaded subgroups at runtime:
+
+```bash
+herakles-node-exporter subgroups
+herakles-node-exporter subgroups --group db --verbose
+```
 
 ---
 
@@ -116,180 +164,175 @@ To control which groups are active at runtime, use `search_mode`, `search_groups
 
 ### Exporter Self-Metrics
 
-| Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_exporter_scrape_duration_seconds` | Gauge | Time spent serving /metrics request (reading from cache) | — |
-| `herakles_exporter_processes_total` | Gauge | Number of processes currently exported by herakles-node-exporter | — |
-| `herakles_exporter_cache_update_duration_seconds` | Gauge | Time spent updating the process metrics cache in background | — |
-| `herakles_exporter_cache_update_success` | Gauge | Whether the last cache update was successful (1) or failed (0) | — |
-| `herakles_exporter_cache_updating` | Gauge | Whether cache update is currently in progress (1) or idle (0) | — |
+| Metric | Type | Description |
+|---|---|---|
+| `herakles_exporter_scrape_duration_seconds` | Gauge | Time spent serving `/metrics` (reading from cache) |
+| `herakles_exporter_processes_total` | Gauge | Number of processes currently exported |
+| `herakles_exporter_cache_update_duration_seconds` | Gauge | Time spent on last background cache update |
+| `herakles_exporter_cache_update_success` | Gauge | 1 if last cache update succeeded, 0 if failed |
+| `herakles_exporter_cache_updating` | Gauge | 1 if cache update is in progress, 0 if idle |
 
 ### Process Group Metrics
 
+These are the primary metrics for alerting and dashboards. All aggregated at `(group, subgroup)` level — no PID labels.
+
 | Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_group_cpu_usage_ratio` | Gauge | CPU usage ratio per group and subgroup (0.0–1.0) | `group`, `subgroup` |
-| `herakles_group_cpu_seconds_total` | Counter | Total CPU time in seconds per group, subgroup, and mode | `group`, `subgroup`, `mode` |
-| `herakles_group_memory_rss_bytes` | Gauge | Sum of RSS bytes per group and subgroup | `group`, `subgroup` |
-| `herakles_group_memory_pss_bytes` | Gauge | Sum of PSS bytes per group and subgroup | `group`, `subgroup` |
-| `herakles_group_memory_swap_bytes` | Gauge | Sum of swap bytes per group and subgroup | `group`, `subgroup` |
-| `herakles_group_blkio_read_bytes_total` | Counter | Total bytes read per group and subgroup | `group`, `subgroup` |
-| `herakles_group_blkio_write_bytes_total` | Counter | Total bytes written per group and subgroup | `group`, `subgroup` |
-| `herakles_group_blkio_read_syscalls_total` | Counter | Total read syscalls per group and subgroup | `group`, `subgroup` |
-| `herakles_group_blkio_write_syscalls_total` | Counter | Total write syscalls per group and subgroup | `group`, `subgroup` |
-| `herakles_group_net_rx_bytes_total` | Counter | Total bytes received per group and subgroup (eBPF) | `group`, `subgroup` |
-| `herakles_group_net_tx_bytes_total` | Counter | Total bytes transmitted per group and subgroup (eBPF) | `group`, `subgroup` |
-| `herakles_group_net_connections_total` | Gauge | Total network connections per group, subgroup, and protocol | `group`, `subgroup`, `proto` |
+|---|---|---|---|
+| `herakles_group_memory_rss_bytes` | Gauge | Sum of RSS bytes | group, subgroup |
+| `herakles_group_memory_pss_bytes` | Gauge | Sum of PSS bytes (deduplicates shared memory) | group, subgroup |
+| `herakles_group_memory_swap_bytes` | Gauge | Sum of swap bytes | group, subgroup |
+| `herakles_group_cpu_usage_ratio` | Gauge | CPU usage ratio (0.0–1.0) | group, subgroup |
+| `herakles_group_cpu_seconds_total` | Counter | Total CPU time by mode | group, subgroup, mode |
+| `herakles_group_blkio_read_bytes_total` | Counter | Total bytes read | group, subgroup |
+| `herakles_group_blkio_write_bytes_total` | Counter | Total bytes written | group, subgroup |
+| `herakles_group_blkio_read_syscalls_total` | Counter | Total read syscalls | group, subgroup |
+| `herakles_group_blkio_write_syscalls_total` | Counter | Total write syscalls | group, subgroup |
+| `herakles_group_net_rx_bytes_total` | Counter | Total bytes received (eBPF) | group, subgroup |
+| `herakles_group_net_tx_bytes_total` | Counter | Total bytes transmitted (eBPF) | group, subgroup |
+| `herakles_group_net_connections_total` | Gauge | Total network connections by protocol (eBPF) | group, subgroup, proto |
 
 ### System Memory Metrics
 
-| Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_memory_total_bytes` | Gauge | Total system memory in bytes | — |
-| `herakles_system_memory_available_bytes` | Gauge | Available system memory in bytes | — |
-| `herakles_system_memory_used_ratio` | Gauge | System memory used ratio (0.0–1.0) | — |
-| `herakles_system_memory_cached_bytes` | Gauge | Page cache memory in bytes | — |
-| `herakles_system_memory_buffers_bytes` | Gauge | Buffer cache memory in bytes | — |
-| `herakles_system_swap_used_ratio` | Gauge | System swap memory used ratio (0.0–1.0) | — |
-| `herakles_system_memory_psi_wait_seconds_total` | Counter | Total memory pressure stall time in seconds | — |
+| Metric | Type | Description |
+|---|---|---|
+| `herakles_system_memory_total_bytes` | Gauge | Total system memory |
+| `herakles_system_memory_available_bytes` | Gauge | Available system memory |
+| `herakles_system_memory_used_ratio` | Gauge | Memory used ratio (0.0–1.0) |
+| `herakles_system_memory_cached_bytes` | Gauge | Page cache memory |
+| `herakles_system_memory_buffers_bytes` | Gauge | Buffer cache memory |
+| `herakles_system_swap_used_ratio` | Gauge | Swap used ratio (0.0–1.0) |
+| `herakles_system_memory_psi_wait_seconds_total` | Counter | Total memory pressure stall time |
 
 ### System CPU Metrics
 
 | Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_cpu_usage_ratio` | Gauge | System CPU usage ratio (0.0–1.0) | — |
-| `herakles_system_cpu_idle_ratio` | Gauge | System CPU idle ratio (0.0–1.0) | — |
-| `herakles_system_cpu_iowait_ratio` | Gauge | System CPU iowait ratio (0.0–1.0) | — |
-| `herakles_system_cpu_steal_ratio` | Gauge | System CPU steal ratio (0.0–1.0) | — |
-| `herakles_system_cpu_load_1` | Gauge | System load average over 1 minute | — |
-| `herakles_system_cpu_load_5` | Gauge | System load average over 5 minutes | — |
-| `herakles_system_cpu_load_15` | Gauge | System load average over 15 minutes | — |
-| `herakles_system_cpu_psi_wait_seconds_total` | Counter | Total CPU pressure stall time in seconds | — |
+|---|---|---|---|
+| `herakles_system_cpu_usage_ratio` | Gauge | CPU usage ratio (0.0–1.0) | — |
+| `herakles_system_cpu_idle_ratio` | Gauge | CPU idle ratio (0.0–1.0) | — |
+| `herakles_system_cpu_iowait_ratio` | Gauge | CPU iowait ratio (0.0–1.0) | — |
+| `herakles_system_cpu_steal_ratio` | Gauge | CPU steal ratio (0.0–1.0) | — |
+| `herakles_system_cpu_load_1` | Gauge | Load average (1 min) | — |
+| `herakles_system_cpu_load_5` | Gauge | Load average (5 min) | — |
+| `herakles_system_cpu_load_15` | Gauge | Load average (15 min) | — |
+| `herakles_system_cpu_psi_wait_seconds_total` | Counter | Total CPU pressure stall time | — |
 
 ### Disk I/O Metrics
 
 | Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_disk_read_bytes_total` | Counter | Total bytes read from disk device | `device` |
-| `herakles_system_disk_write_bytes_total` | Counter | Total bytes written to disk device | `device` |
-| `herakles_system_disk_io_time_seconds_total` | Counter | Total time spent doing I/Os in seconds | `device` |
-| `herakles_system_disk_queue_depth` | Gauge | Number of I/O operations currently in progress for disk device | `device` |
-| `herakles_system_disk_psi_wait_seconds_total` | Counter | Total I/O pressure stall time in seconds | — |
+|---|---|---|---|
+| `herakles_system_disk_read_bytes_total` | Counter | Total bytes read | device |
+| `herakles_system_disk_write_bytes_total` | Counter | Total bytes written | device |
+| `herakles_system_disk_io_time_seconds_total` | Counter | Total time doing I/Os | device |
+| `herakles_system_disk_queue_depth` | Gauge | I/O operations currently in progress | device |
+| `herakles_system_disk_psi_wait_seconds_total` | Counter | Total I/O pressure stall time | — |
 
 ### Filesystem Metrics
 
 | Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_filesystem_avail_bytes` | Gauge | Filesystem space available to non-root users in bytes | `device`, `mountpoint`, `fstype` |
-| `herakles_system_filesystem_size_bytes` | Gauge | Filesystem total size in bytes | `device`, `mountpoint`, `fstype` |
-| `herakles_system_filesystem_files` | Gauge | Filesystem total file nodes | `device`, `mountpoint`, `fstype` |
-| `herakles_system_filesystem_files_free` | Gauge | Filesystem free file nodes | `device`, `mountpoint`, `fstype` |
+|---|---|---|---|
+| `herakles_system_filesystem_size_bytes` | Gauge | Total filesystem size | device, mountpoint, fstype |
+| `herakles_system_filesystem_avail_bytes` | Gauge | Space available to non-root users | device, mountpoint, fstype |
+| `herakles_system_filesystem_files` | Gauge | Total inodes | device, mountpoint, fstype |
+| `herakles_system_filesystem_files_free` | Gauge | Free inodes | device, mountpoint, fstype |
 
 ### Network Metrics
 
 | Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_net_rx_bytes_total` | Counter | Total bytes received per network interface | `iface` |
-| `herakles_system_net_tx_bytes_total` | Counter | Total bytes transmitted per network interface | `iface` |
-| `herakles_system_net_rx_errors_total` | Counter | Total receive errors per network interface | `iface` |
-| `herakles_system_net_tx_errors_total` | Counter | Total transmit errors per network interface | `iface` |
-| `herakles_system_net_drops_total` | Counter | Total dropped packets per network interface and direction | `iface`, `direction` |
+|---|---|---|---|
+| `herakles_system_net_rx_bytes_total` | Counter | Bytes received | iface |
+| `herakles_system_net_tx_bytes_total` | Counter | Bytes transmitted | iface |
+| `herakles_system_net_rx_errors_total` | Counter | Receive errors | iface |
+| `herakles_system_net_tx_errors_total` | Counter | Transmit errors | iface |
+| `herakles_system_net_drops_total` | Counter | Dropped packets | iface, direction |
 
 ### TCP Connection State Metrics
 
-These metrics are populated by eBPF when the `ebpf` feature is compiled in and `enable_tcp_tracking` is `true`. The metrics are always registered in the Prometheus registry but only updated by the eBPF subsystem.
+Always registered in the Prometheus registry. Only updated when `ebpf` is compiled in and `enable_tcp_tracking` is true.
 
-| Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_tcp_connections_established` | Gauge | Number of TCP connections in ESTABLISHED state | — |
-| `herakles_system_tcp_connections_syn_sent` | Gauge | Number of TCP connections in SYN_SENT state | — |
-| `herakles_system_tcp_connections_syn_recv` | Gauge | Number of TCP connections in SYN_RECV state | — |
-| `herakles_system_tcp_connections_fin_wait1` | Gauge | Number of TCP connections in FIN_WAIT1 state | — |
-| `herakles_system_tcp_connections_fin_wait2` | Gauge | Number of TCP connections in FIN_WAIT2 state | — |
-| `herakles_system_tcp_connections_time_wait` | Gauge | Number of TCP connections in TIME_WAIT state | — |
-| `herakles_system_tcp_connections_close` | Gauge | Number of TCP connections in CLOSE state | — |
-| `herakles_system_tcp_connections_close_wait` | Gauge | Number of TCP connections in CLOSE_WAIT state | — |
-| `herakles_system_tcp_connections_last_ack` | Gauge | Number of TCP connections in LAST_ACK state | — |
-| `herakles_system_tcp_connections_listen` | Gauge | Number of TCP connections in LISTEN state | — |
-| `herakles_system_tcp_connections_closing` | Gauge | Number of TCP connections in CLOSING state | — |
+| Metric | Type | Description |
+|---|---|---|
+| `herakles_system_tcp_connections_established` | Gauge | ESTABLISHED |
+| `herakles_system_tcp_connections_syn_sent` | Gauge | SYN_SENT |
+| `herakles_system_tcp_connections_syn_recv` | Gauge | SYN_RECV |
+| `herakles_system_tcp_connections_fin_wait1` | Gauge | FIN_WAIT1 |
+| `herakles_system_tcp_connections_fin_wait2` | Gauge | FIN_WAIT2 |
+| `herakles_system_tcp_connections_time_wait` | Gauge | TIME_WAIT |
+| `herakles_system_tcp_connections_close` | Gauge | CLOSE |
+| `herakles_system_tcp_connections_close_wait` | Gauge | CLOSE_WAIT |
+| `herakles_system_tcp_connections_last_ack` | Gauge | LAST_ACK |
+| `herakles_system_tcp_connections_listen` | Gauge | LISTEN |
+| `herakles_system_tcp_connections_closing` | Gauge | CLOSING |
 
 ### Hardware & Host Metrics
 
 | Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_system_cpu_temp_celsius` | Gauge | CPU/sensor temperature in Celsius | `sensor` |
-| `herakles_system_uptime_seconds` | Gauge | System uptime in seconds | — |
-| `herakles_system_boot_time_seconds` | Gauge | System boot time as Unix timestamp | — |
-| `herakles_system_uname_info` | Gauge | System information from uname | `sysname`, `release`, `version`, `machine` |
-| `herakles_system_context_switches_total` | Counter | Total number of context switches | — |
-| `herakles_system_forks_total` | Counter | Total number of forks since boot | — |
-| `herakles_system_open_fds` | Gauge | Number of file descriptors system-wide | `state` |
+|---|---|---|---|
+| `herakles_system_cpu_temp_celsius` | Gauge | Temperature in Celsius | sensor |
+| `herakles_system_uptime_seconds` | Gauge | System uptime | — |
+| `herakles_system_boot_time_seconds` | Gauge | Boot time (Unix timestamp) | — |
+| `herakles_system_uname_info` | Gauge | Kernel/arch info (always 1) | sysname, release, version, machine |
+| `herakles_system_context_switches_total` | Counter | Total context switches | — |
+| `herakles_system_forks_total` | Counter | Total forks since boot | — |
+| `herakles_system_open_fds` | Gauge | Open file descriptors system-wide | state |
 | `herakles_system_entropy_bits` | Gauge | Available entropy in bits | — |
 
-### eBPF Metrics
+### eBPF Subsystem Metrics
 
-These metrics track the health of the eBPF subsystem itself. They are always registered in the Prometheus registry but only updated when the `ebpf` Cargo feature is compiled in and eBPF initialization succeeds at runtime.
+Always registered. Only updated when the `ebpf` feature is compiled in and eBPF initialization succeeds at runtime.
 
-| Metric | Type | Description | Labels |
-|--------|------|-------------|--------|
-| `herakles_ebpf_events_processed_total` | Counter | Total number of eBPF events processed | — |
-| `herakles_ebpf_events_dropped_total` | Counter | Total number of eBPF events dropped | — |
-| `herakles_ebpf_maps_count` | Gauge | Number of eBPF programs currently loaded | — |
-| `herakles_ebpf_cpu_seconds_total` | Counter | Total CPU time used by eBPF programs in seconds | — |
+| Metric | Type | Description |
+|---|---|---|
+| `herakles_ebpf_events_processed_total` | Counter | Total eBPF events processed |
+| `herakles_ebpf_events_dropped_total` | Counter | Total eBPF events dropped |
+| `herakles_ebpf_maps_count` | Gauge | Number of eBPF programs currently loaded |
+| `herakles_ebpf_cpu_seconds_total` | Counter | Total CPU time used by eBPF programs |
 
 ---
 
 ## Installation
 
-### Standard build (eBPF enabled by default)
+### Build
 
-The `ebpf` feature is the default. Building with eBPF requires `clang`, `bpftool`, and a kernel with BTF support (`/sys/kernel/btf/vmlinux`).
+The `ebpf` feature is enabled by default. Building with eBPF requires `clang`, `bpftool`, and a kernel with BTF support (`/sys/kernel/btf/vmlinux`).
 
 ```bash
-# Release build with eBPF (default)
+# Install build dependencies (Debian/Ubuntu)
+sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r) bpftool
+
+# Release build with eBPF
 make release
 
-# Or directly with cargo
-cargo build --release
+# Release build without eBPF (smaller binary, no clang/bpftool dependency)
+make release CARGOFLAGS='--no-default-features'
 
-# Binary is placed in binary/herakles-node-exporter
-```
-
-### Build without eBPF
-
-```bash
-make build CARGOFLAGS='--no-default-features'
-# Or
-cargo build --release --no-default-features
+# Binary lands in binary/herakles-node-exporter regardless of build profile
 ```
 
 ### System-wide installation
 
-The `install` subcommand copies the binary to the system path and optionally enables a systemd service:
-
 ```bash
-sudo ./herakles-node-exporter install
-# Skip systemd service setup:
-sudo ./herakles-node-exporter install --no-service
-# Force reinstall over existing installation:
-sudo ./herakles-node-exporter install --force
+# Install binary + systemd service (requires root)
+sudo ./binary/herakles-node-exporter install
+
+# Install without starting the service
+sudo ./binary/herakles-node-exporter install --no-service
+
+# Force reinstall over existing installation
+sudo ./binary/herakles-node-exporter install --force
+
+# Uninstall
+sudo ./binary/herakles-node-exporter uninstall
 ```
 
-To uninstall:
-
-```bash
-sudo ./herakles-node-exporter uninstall
-```
+Installation places the binary at `/opt/herakles/bin/`, configuration at `/etc/herakles/`, and the systemd service at `/etc/systemd/system/herakles-node-exporter.service`.
 
 ### Docker
 
-The Dockerfile expects a pre-built statically linked musl binary named `herakles-node-exporter` in the build context (produced by a CI pipeline). It uses `alpine:3.19` as the base image and runs as the `herakles` user (uid=1000).
+The image expects a pre-built statically linked musl binary and runs as the `herakles` user (uid=1000). `--pid=host` and a `/proc` bind-mount are required for full host monitoring.
 
 ```bash
-# Build (requires pre-built binary in current directory)
 docker build -t herakles-node-exporter:latest .
 
-# Run — /proc must be bind-mounted for full host monitoring
 docker run -d \
   --name herakles-node-exporter \
   --pid=host \
@@ -298,24 +341,19 @@ docker run -d \
   herakles-node-exporter:latest
 ```
 
-> **Note:** The container image runs as the `herakles` user. Without `--pid=host` and a `/proc` bind-mount, only processes visible to that user will be monitored. See the Docker Compose section for a complete example.
-
 ---
 
 ## Configuration
 
-Configuration is loaded from the first file found in this search order, then merged with CLI flags (CLI takes precedence):
+Configuration is loaded from the first file found in this order, then merged with CLI flags (CLI takes precedence):
 
-1. `/etc/herakles/node-exporter.yaml`
-2. `/etc/herakles/node-exporter.yml`
-3. `/etc/herakles/node-exporter.json`
-4. `./herakles-node-exporter.yaml`
-5. `./herakles-node-exporter.yml`
-6. `./herakles-node-exporter.json`
+1. `--config <path>` if specified
+2. `/etc/herakles/node-exporter.yaml` (also `.yml`, `.json`)
+3. `./herakles-node-exporter.yaml` (also `.yml`, `.json`)
 
-YAML, JSON, and TOML formats are all supported. Use `--config <path>` to specify an explicit path, or `--no-config` to ignore all config files.
+Use `--no-config` to ignore all config files. Use `--show-config` to print the effective merged configuration.
 
-### Minimal configuration
+### Minimal
 
 ```yaml
 port: 9215
@@ -323,10 +361,9 @@ bind: "0.0.0.0"
 cache_ttl: 30
 ```
 
-### Production configuration
+### Production
 
 ```yaml
-# Server
 port: 9215
 bind: "0.0.0.0"
 cache_ttl: 30
@@ -336,32 +373,33 @@ min_uss_kb: 0
 parallelism: 4
 max_processes: 2000
 
-# Metrics
+# Metrics collection
 enable_rss: true
 enable_pss: true
 enable_uss: true
 enable_cpu: true
 
-# Group filtering (optional — include only these groups)
+# Group filtering — uncomment to restrict which groups are active
 # search_mode: "include"
 # search_groups: ["db", "web", "cache"]
 
-# Disable "other" group entirely
+# "other" group handling
 disable_others: false
-top_n_subgroup: 3
-top_n_others: 10
-details_top_n: 5
-
-# Feature flags
-enable_health: true
-enable_telemetry: true
-enable_default_collectors: true
-enable_pprof: false
+top_n_subgroup: 3      # Top-N processes shown in /details per subgroup
+top_n_others: 10       # Top-N processes shown in /details for "other"
+details_top_n: 5       # Total Top-N shown in /details view
 
 # Collectors
 enable_filesystem_collector: true
 enable_thermal_collector: true
 enable_psi_collector: true
+
+# Ring buffer — controls /details historical data depth
+ringsize:
+  max_memory_mb: 15
+  interval_seconds: 30
+  min_entries_per_subgroup: 10
+  max_entries_per_subgroup: 120
 
 # eBPF
 enable_ebpf: true
@@ -369,118 +407,113 @@ enable_ebpf_network: true
 enable_ebpf_disk: true
 enable_tcp_tracking: true
 
-# Ringbuffer (for /details historical data)
-ringsize:
-  max_memory_mb: 15
-  interval_seconds: 30
-  min_entries_per_subgroup: 10
-  max_entries_per_subgroup: 120
-
-# TLS (optional)
+# TLS (disabled by default)
 enable_tls: false
 # tls_cert_path: "/etc/herakles/cert.pem"
 # tls_key_path: "/etc/herakles/key.pem"
 
-# Logging
 log_level: "info"
-enable_file_logging: false
 ```
 
-### Configuration fields
+### Configuration reference
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `port` | `u16` | `9215` | HTTP listen port |
-| `bind` | `string` | `"0.0.0.0"` | Bind address |
-| `cache_ttl` | `u64` | `30` | Cache TTL in seconds |
-| `min_uss_kb` | `u64` | `0` | Minimum USS in KB to include process |
-| `include_names` | `[string]` | — | Include only processes with these names |
-| `exclude_names` | `[string]` | — | Exclude processes with these names |
-| `parallelism` | `usize` | auto | Rayon thread pool size (0 = auto) |
-| `max_processes` | `usize` | unlimited | Maximum processes to scan |
-| `io_buffer_kb` | `usize` | `256` | Buffer size for generic /proc reads |
-| `smaps_buffer_kb` | `usize` | `512` | Buffer size for /proc/<pid>/smaps |
-| `smaps_rollup_buffer_kb` | `usize` | `256` | Buffer size for /proc/<pid>/smaps_rollup |
-| `enable_health` | `bool` | `true` | Enable /health endpoint |
-| `enable_telemetry` | `bool` | `true` | Enable herakles_exporter_* self-metrics |
-| `enable_default_collectors` | `bool` | `true` | Enable generic system collectors |
-| `enable_pprof` | `bool` | `false` | Enable /debug/pprof endpoints |
-| `log_level` | `string` | `"info"` | Log level (off/error/warn/info/debug/trace) |
-| `enable_file_logging` | `bool` | `false` | Enable file logging |
-| `log_file` | `path` | — | Log file path |
-| `search_mode` | `string` | — | `"include"` or `"exclude"` for group filtering |
-| `search_groups` | `[string]` | — | Group names to include/exclude |
-| `search_subgroups` | `[string]` | — | Subgroup names to include/exclude |
-| `disable_others` | `bool` | `false` | Completely ignore `other`/`unknown` processes |
-| `top_n_subgroup` | `usize` | `3` | Top-N processes per subgroup (for /details) |
-| `top_n_others` | `usize` | `10` | Top-N processes for the `other` group |
-| `details_top_n` | `usize` | `5` | Top-N processes displayed in /details |
-| `enable_rss` | `bool` | `true` | Collect RSS memory metrics |
-| `enable_pss` | `bool` | `true` | Collect PSS memory metrics |
-| `enable_uss` | `bool` | `true` | Collect USS memory metrics |
-| `enable_cpu` | `bool` | `true` | Collect CPU metrics |
-| `test_data_file` | `path` | — | Use synthetic JSON data instead of /proc |
-| `enable_tls` | `bool` | `false` | Enable HTTPS |
-| `tls_cert_path` | `string` | — | Path to TLS certificate (PEM) |
-| `tls_key_path` | `string` | — | Path to TLS private key (PEM) |
-| `enable_ebpf` | `bool` | `true` | Enable eBPF subsystem |
-| `enable_ebpf_network` | `bool` | `true` | Enable eBPF network I/O tracking |
-| `enable_ebpf_disk` | `bool` | `true` | Enable eBPF disk I/O tracking |
-| `enable_filesystem_collector` | `bool` | `true` | Enable filesystem metrics collector |
-| `enable_thermal_collector` | `bool` | `true` | Enable thermal/temperature metrics collector |
-| `enable_psi_collector` | `bool` | `true` | Enable PSI (pressure stall) metrics collector |
-| `ringbuffer.max_memory_mb` | `usize` | `15` | Maximum total ringbuffer memory in MB |
-| `ringbuffer.interval_seconds` | `u64` | `30` | Ringbuffer sampling interval in seconds |
-| `ringbuffer.min_entries_per_subgroup` | `usize` | `10` | Minimum history entries per subgroup |
-| `ringbuffer.max_entries_per_subgroup` | `usize` | `120` | Maximum history entries per subgroup |
+|---|---|---|---|
+| `port` | u16 | 9215 | HTTP listen port |
+| `bind` | string | "0.0.0.0" | Bind address |
+| `cache_ttl` | u64 | 30 | Cache TTL in seconds |
+| `min_uss_kb` | u64 | 0 | Minimum USS in KB to include a process |
+| `include_names` | [string] | — | Include only processes with these names |
+| `exclude_names` | [string] | — | Exclude processes with these names |
+| `parallelism` | usize | auto | Rayon thread pool size (0 = auto) |
+| `max_processes` | usize | unlimited | Maximum processes to scan |
+| `io_buffer_kb` | usize | 256 | Buffer size for generic `/proc` reads |
+| `smaps_buffer_kb` | usize | 512 | Buffer size for `/proc/<pid>/smaps` |
+| `smaps_rollup_buffer_kb` | usize | 256 | Buffer size for `/proc/<pid>/smaps_rollup` |
+| `enable_rss` | bool | true | Collect RSS memory |
+| `enable_pss` | bool | true | Collect PSS memory |
+| `enable_uss` | bool | true | Collect USS memory |
+| `enable_cpu` | bool | true | Collect CPU metrics |
+| `search_mode` | string | — | "include" or "exclude" for group filtering |
+| `search_groups` | [string] | — | Group names to include/exclude |
+| `search_subgroups` | [string] | — | Subgroup names to include/exclude |
+| `disable_others` | bool | false | Ignore all other/unknown processes entirely |
+| `top_n_subgroup` | usize | 3 | Top-N processes per subgroup in `/details` |
+| `top_n_others` | usize | 10 | Top-N processes for the "other" group in `/details` |
+| `details_top_n` | usize | 5 | Top-N shown in `/details` view |
+| `enable_health` | bool | true | Enable `/health` endpoint |
+| `enable_telemetry` | bool | true | Enable `herakles_exporter_*` self-metrics |
+| `enable_default_collectors` | bool | true | Enable generic system collectors |
+| `enable_pprof` | bool | false | Enable `/debug/pprof` endpoints |
+| `enable_filesystem_collector` | bool | true | Filesystem metrics |
+| `enable_thermal_collector` | bool | true | Temperature metrics |
+| `enable_psi_collector` | bool | true | PSI pressure stall metrics |
+| `log_level` | string | "info" | off / error / warn / info / debug / trace |
+| `enable_file_logging` | bool | false | Enable file logging |
+| `log_file` | path | — | Log file path |
+| `test_data_file` | path | — | Use synthetic JSON data instead of `/proc` |
+| `enable_tls` | bool | false | Enable HTTPS |
+| `tls_cert_path` | string | — | TLS certificate (PEM) |
+| `tls_key_path` | string | — | TLS private key (PEM) |
+| `enable_ebpf` | bool | true | Enable eBPF subsystem |
+| `enable_ebpf_network` | bool | true | eBPF network I/O tracking |
+| `enable_ebpf_disk` | bool | true | eBPF disk I/O tracking |
+| `enable_tcp_tracking` | bool | true | TCP connection state tracking via eBPF |
+| `ringsize.max_memory_mb` | usize | 15 | Maximum ring buffer memory for `/details` history |
+| `ringsize.interval_seconds` | u64 | 30 | Ring buffer sampling interval |
+| `ringsize.min_entries_per_subgroup` | usize | 10 | Minimum history entries per subgroup |
+| `ringsize.max_entries_per_subgroup` | usize | 120 | Maximum history entries per subgroup |
 
 ---
 
-## eBPF Requirements
+## eBPF
 
-The `ebpf` feature is compiled in by default (`default = ["ebpf"]` in `Cargo.toml`). It provides:
+The `ebpf` feature is compiled in by default and provides:
 
-- Per-process network I/O aggregation → `herakles_group_net_rx_bytes_total`, `herakles_group_net_tx_bytes_total`
-- Per-process block I/O aggregation → `herakles_group_blkio_*`
+- Per-process network I/O → `herakles_group_net_rx/tx_bytes_total`
+- Per-process block I/O → `herakles_group_blkio_*`
 - TCP connection state tracking → `herakles_system_tcp_connections_*`
-- eBPF performance self-metrics → `herakles_ebpf_*`
+- eBPF self-monitoring → `herakles_ebpf_*`
 
-### Kernel requirements
+### Requirements
 
-- Kernel ≥ 4.18 (as required by `--enable-ebpf` flag description in `src/cli.rs`)
-- BTF (BPF Type Format) enabled: `/sys/kernel/btf/vmlinux` must exist
-- Required capabilities: `CAP_BPF`, `CAP_PERFMON` (or run as root)
-
-### Build-time dependencies (when compiling with `ebpf` feature)
-
-| Dependency | Purpose |
-|------------|---------|
-| `clang` | Compiles `src/ebpf/bpf/process_io.bpf.c` to BPF object code |
-| `bpftool` | Generates `vmlinux.h` from `/sys/kernel/btf/vmlinux` |
-| `libbpf-rs = "0.24"` | Rust bindings for libbpf (pulled by Cargo) |
-| `libbpf-sys = "1.4"` | C libbpf library (pulled by Cargo) |
+| Requirement | Detail |
+|---|---|
+| Linux kernel | ≥ 4.18 with BTF enabled |
+| BTF | `/sys/kernel/btf/vmlinux` must exist |
+| Capabilities | `CAP_BPF` + `CAP_PERFMON`, or root |
+| Build: clang | ≥ 10 |
+| Build: bpftool | any recent version |
+| Build: libbpf | pulled automatically by Cargo |
 
 ### Graceful degradation
 
-eBPF initialization failure is non-fatal. If `EbpfManager::new()` returns an error at startup, the exporter logs a warning (`⚠️ Failed to initialize eBPF: … - running without eBPF metrics`), increments the internal `ebpf_init_failures` counter, and continues running. All non-eBPF metrics remain fully functional. Check `/health` to see whether eBPF initialized successfully.
+eBPF initialization failure is non-fatal. If `EbpfManager::new()` returns an error, the exporter logs a warning and continues. All non-eBPF metrics remain fully functional. Check `/health` to see whether eBPF initialized successfully.
+
+```
+INFO  ✅ eBPF programs loaded and attached successfully
+WARN  ⚠️  Failed to initialize eBPF: [reason] - running without eBPF metrics
+```
 
 ### Troubleshooting
 
 ```bash
-# Check BTF availability
+# BTF availability
 ls -la /sys/kernel/btf/vmlinux
 
-# Check required capabilities
+# Kernel version
+uname -r
+
+# Capabilities
 capsh --print | grep -E 'cap_bpf|cap_perfmon'
 
-# Check clang and bpftool
-clang --version
-bpftool version
+# Build tools
+clang --version && bpftool version
 
-# Validate runtime requirements
+# Runtime requirement check
 herakles-node-exporter check-requirements --ebpf
 
-# Check eBPF status via health endpoint
+# eBPF status at runtime
 curl http://localhost:9215/health
 ```
 
@@ -489,38 +522,44 @@ curl http://localhost:9215/health
 ## Example PromQL Queries
 
 ```promql
-# RSS memory by subgroup — all postgres processes across all hosts
+# RSS memory for all postgres processes across all hosts
 herakles_group_memory_rss_bytes{subgroup="postgres"}
 
 # PSS memory by group — deduplicates shared memory contributions
 herakles_group_memory_pss_bytes{group="db"}
 
-# Disk read throughput per group (bytes/sec, 5-min rate)
+# Disk read throughput per group (bytes/sec)
 rate(herakles_group_blkio_read_bytes_total[5m])
 
 # Disk write throughput per block device
 rate(herakles_system_disk_write_bytes_total[5m])
 
-# Filesystem usage percentage per mount point
+# Filesystem usage per mountpoint (0.0–1.0)
 1 - (herakles_system_filesystem_avail_bytes / herakles_system_filesystem_size_bytes)
 
-# Network receive throughput per interface (bytes/sec)
+# Filesystems below 10% free space
+(herakles_system_filesystem_avail_bytes / herakles_system_filesystem_size_bytes) < 0.1
+
+# Network receive throughput per interface
 rate(herakles_system_net_rx_bytes_total[5m])
 
-# Network transmit throughput per process group (eBPF)
+# Network transmit throughput per process group (requires eBPF)
 rate(herakles_group_net_tx_bytes_total[5m])
 
-# CPU PSI stall rate — fraction of time stalled waiting for CPU
+# CPU pressure stall rate — fraction of time stalled on CPU
 rate(herakles_system_cpu_psi_wait_seconds_total[5m])
 
-# Memory PSI stall rate
+# Memory pressure stall rate
 rate(herakles_system_memory_psi_wait_seconds_total[5m])
 
-# I/O PSI stall rate
+# I/O pressure stall rate
 rate(herakles_system_disk_psi_wait_seconds_total[5m])
 
 # Alert: system memory pressure above 90%
 herakles_system_memory_used_ratio > 0.9
+
+# Alert: db group memory growing faster than 100MB/min
+rate(herakles_group_memory_rss_bytes{group="db"}[5m]) * 60 > 1e8
 ```
 
 ---
@@ -539,48 +578,60 @@ Commands:
   install             Install system-wide with systemd service
   uninstall           Uninstall system-wide installation
   check-requirements  Check runtime requirements and permissions
-  help                Print this message or the help of the given subcommand(s)
 ```
 
-### Flags
-
 | Flag | Short | Default | Description |
-|------|-------|---------|-------------|
+|---|---|---|---|
 | `--port <PORT>` | `-p` | — | HTTP listen port |
-| `--bind <BIND>` | — | — | Bind to specific interface/IP |
-| `--log-level <LEVEL>` | — | `info` | Log level: off, error, warn, info, debug, trace |
+| `--bind <BIND>` | — | — | Bind address |
+| `--log-level <LEVEL>` | — | info | off / error / warn / info / debug / trace |
 | `--config <FILE>` | `-c` | — | Config file (YAML/JSON/TOML) |
-| `--no-config` | — | false | Disable all config file loading |
+| `--no-config` | — | false | Ignore all config files |
 | `--show-config` | — | false | Print effective merged config and exit |
-| `--show-user-config` | — | false | Print only the loaded user config file + full path and exit |
-| `--config-format <FMT>` | — | `yaml` | Output format for --show-config*: yaml, json, toml |
-| `--check-config` | — | false | Validate config and exit (return code 1 on error) |
-| `--debug` | — | false | Enable /debug/pprof endpoints |
-| `--cache-ttl <SECS>` | — | — | Cache metrics for N seconds |
-| `--disable-health` | — | false | Disable /health endpoint + health metrics |
-| `--disable-telemetry` | — | false | Disable internal exporter_* metrics |
-| `--disable-default-collectors` | — | false | Disable generic collectors |
-| `--io-buffer-kb <KB>` | — | — | Override IO buffer size (KB) for generic /proc readers |
-| `--smaps-buffer-kb <KB>` | — | — | Override buffer size (KB) for /proc/<pid>/smaps |
-| `--smaps-rollup-buffer-kb <KB>` | — | — | Override buffer size (KB) for /proc/<pid>/smaps_rollup |
-| `--min-uss-kb <KB>` | — | — | Minimum USS in KB to include process |
-| `--include-names <NAMES>` | — | — | Include only processes matching these names (comma-separated) |
-| `--exclude-names <NAMES>` | — | — | Exclude processes matching these names (comma-separated) |
+| `--show-user-config` | — | false | Print loaded user config file and path, then exit |
+| `--config-format <FMT>` | — | yaml | Output format for `--show-config*`: yaml, json, toml |
+| `--check-config` | — | false | Validate config and exit (rc=1 on error) |
+| `--debug` | — | false | Enable `/debug/pprof` endpoints |
+| `--cache-ttl <SECS>` | — | — | Override cache TTL |
+| `--disable-health` | — | false | Disable `/health` endpoint |
+| `--disable-telemetry` | — | false | Disable `herakles_exporter_*` self-metrics |
+| `--disable-default-collectors` | — | false | Disable generic system collectors |
+| `--io-buffer-kb <KB>` | — | — | Buffer size for generic `/proc` reads |
+| `--smaps-buffer-kb <KB>` | — | — | Buffer size for `/proc/<pid>/smaps` |
+| `--smaps-rollup-buffer-kb <KB>` | — | — | Buffer size for `/proc/<pid>/smaps_rollup` |
+| `--min-uss-kb <KB>` | — | — | Minimum USS in KB to include a process |
+| `--include-names <NAMES>` | — | — | Include only these process names (comma-separated) |
+| `--exclude-names <NAMES>` | — | — | Exclude these process names (comma-separated) |
 | `--parallelism <N>` | — | — | Parallel processing threads (0 = auto) |
-| `--max-processes <N>` | — | — | Maximum number of processes to scan |
-| `--top-n-subgroup <N>` | — | — | Top-N processes to export per subgroup (override config) |
-| `--top-n-others <N>` | — | — | Top-N processes to export for "other" group (override config) |
-| `--test-data-file <FILE>` | `-t` | — | Path to JSON test data file (uses synthetic data instead of /proc) |
-| `--enable-tls` | — | false | Enable TLS/SSL for HTTPS |
-| `--tls-cert <FILE>` | — | — | Path to TLS certificate file (PEM format) |
-| `--tls-key <FILE>` | — | — | Path to TLS private key file (PEM format) |
-| `--enable-ebpf` | — | false | Enable eBPF-based I/O tracking (requires kernel ≥ 4.18, BTF, CAP_BPF/CAP_PERFMON) |
-| `--enable-ebpf-network` | — | false | Enable eBPF-based network I/O tracking |
-| `--disable-ebpf-network` | — | false | Disable eBPF-based network I/O tracking (conflicts with --enable-ebpf-network) |
-| `--enable-ebpf-disk` | — | false | Enable eBPF-based disk I/O tracking |
-| `--disable-ebpf-disk` | — | false | Disable eBPF-based disk I/O tracking (conflicts with --enable-ebpf-disk) |
-| `--enable-tcp-tracking` | — | false | Enable TCP connection state tracking via eBPF |
-| `--disable-tcp-tracking` | — | false | Disable TCP connection state tracking via eBPF (conflicts with --enable-tcp-tracking) |
+| `--max-processes <N>` | — | — | Maximum processes to scan |
+| `--top-n-subgroup <N>` | — | — | Top-N processes per subgroup in `/details` |
+| `--top-n-others <N>` | — | — | Top-N for the "other" group in `/details` |
+| `--test-data-file <FILE>` | `-t` | — | Synthetic JSON test data instead of `/proc` |
+| `--enable-tls` | — | false | Enable HTTPS |
+| `--tls-cert <FILE>` | — | — | TLS certificate (PEM) |
+| `--tls-key <FILE>` | — | — | TLS private key (PEM) |
+| `--enable-ebpf` | — | false | Enable eBPF (kernel ≥ 4.18, BTF, CAP_BPF/CAP_PERFMON) |
+| `--enable-ebpf-network` | — | false | Enable eBPF network I/O tracking |
+| `--disable-ebpf-network` | — | false | Disable eBPF network I/O tracking |
+| `--enable-ebpf-disk` | — | false | Enable eBPF disk I/O tracking |
+| `--disable-ebpf-disk` | — | false | Disable eBPF disk I/O tracking |
+| `--enable-tcp-tracking` | — | false | Enable TCP state tracking via eBPF |
+| `--disable-tcp-tracking` | — | false | Disable TCP state tracking via eBPF |
+
+---
+
+## Running as Root
+
+Reading `/proc/<pid>/smaps_rollup` for processes owned by other users requires root privileges. This file provides accurate USS (Unique Set Size) figures. Without root, USS data for root-owned processes is unavailable and those processes are silently excluded from group memory metrics.
+
+After eBPF programs are loaded and pinned, the process attempts to drop to the `herakles` system user if it exists (`drop_privileges()` in `src/main.rs`). If the `herakles` user does not exist, the process continues as root — which is the recommended production configuration for complete multi-user system monitoring.
+
+Check effective user before debugging missing processes:
+
+```bash
+ps aux | grep herakles-node-exporter
+# Should show: root ... herakles-node-exporter
+```
 
 ---
 
@@ -594,16 +645,10 @@ After=network.target
 
 [Service]
 Type=simple
-# Root is required to read /proc/<pid>/smaps_rollup for processes owned by other users.
-# After eBPF initialization, the process will attempt to drop privileges to the
-# 'herakles' system user if it exists. If 'herakles' user is not present, the
-# process continues as root (recommended for full system monitoring).
 User=root
 ExecStart=/usr/local/bin/herakles-node-exporter
 Restart=on-failure
 RestartSec=5s
-
-# Security hardening (compatible with /proc access)
 ProtectSystem=strict
 ReadOnlyPaths=/proc
 PrivateTmp=true
@@ -612,8 +657,6 @@ NoNewPrivileges=false
 [Install]
 WantedBy=multi-user.target
 ```
-
-> **Why root?** Reading `/proc/<pid>/smaps_rollup` for processes owned by other users requires root privileges. The exporter reads this file to obtain accurate USS (Unique Set Size) figures. After eBPF programs are loaded and pinned, the process attempts to drop to the `herakles` system user if it exists — see `drop_privileges()` in `src/main.rs`. If the `herakles` user does not exist, the process continues as root, which is the recommended production configuration for full multi-user system monitoring.
 
 ---
 
@@ -642,15 +685,8 @@ services:
 
 ## License
 
-Licensed under either of
-
-- MIT License ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-
-at your option.
-
----
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.
 
 ## Author
 
-Michael Moll <exporter@herakles.now> — Herakles
+Michael Moll — [exporter@herakles.now](mailto:exporter@herakles.now)
