@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Lint GitHub Actions workflows
         id: actionlint
@@ -52,7 +52,7 @@ jobs:
       - name: Lint Markdown
         id: markdown
         continue-on-error: true
-        uses: DavidAnson/markdownlint-cli2-action@v20
+        uses: DavidAnson/markdownlint-cli2-action@v23
         with:
           globs: |
             **/*.md
@@ -80,7 +80,7 @@ jobs:
       - name: Lint Dockerfile
         id: hadolint
         continue-on-error: true
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile
 

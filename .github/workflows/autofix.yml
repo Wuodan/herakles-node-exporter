@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: Create autofix PR
         if: always() && steps.changes.outputs.has_changes == 'true' && env.AUTOFIX_MODE == 'pull_request'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           # Keep the branch name stable so repeated runs update the same autofix PR.
           branch: rust-autofix/${{ github.ref_name }}
