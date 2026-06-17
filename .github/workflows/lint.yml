@@ -45,9 +45,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Lint GitHub Actions workflows
+        id: actionlint
+        continue-on-error: true
         uses: rhysd/actionlint@v1.7.12
 
       - name: Lint Markdown
+        id: markdown
+        continue-on-error: true
         uses: DavidAnson/markdownlint-cli2-action@v20
         with:
           globs: |
@@ -55,6 +59,8 @@ jobs:
             !target/**
 
       - name: Lint shell scripts
+        id: shellcheck
+        continue-on-error: true
         uses: ludeeus/action-shellcheck@2.0.0
         with:
           scandir: .
@@ -67,9 +73,27 @@ jobs:
           tool: taplo-cli
 
       - name: Check TOML formatting
+        id: taplo
+        continue-on-error: true
         run: taplo fmt --check Cargo.toml data/subgroups.toml
 
       - name: Lint Dockerfile
+        id: hadolint
+        continue-on-error: true
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
+
+      - name: Fail if any non-Rust lint failed
+        if: |
+          always() &&
+          (
+            steps.actionlint.outcome == 'failure' ||
+            steps.markdown.outcome == 'failure' ||
+            steps.shellcheck.outcome == 'failure' ||
+            steps.taplo.outcome == 'failure' ||
+            steps.hadolint.outcome == 'failure'
+          )
+        run: |
+          echo "One or more non-Rust lint steps failed."
+          exit 1
