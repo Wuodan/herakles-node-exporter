@@ -73,7 +73,8 @@ jobs:
       - name: Check TOML formatting
         id: taplo
         continue-on-error: true
-        run: taplo fmt --check --diff Cargo.toml data/subgroups.toml
+        shell: bash
+        run: taplo fmt --check --diff .
 
       - name: Lint Dockerfile
         id: hadolint
