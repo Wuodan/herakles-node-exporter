@@ -198,13 +198,16 @@ For production environments, use certificates from a trusted Certificate Authori
 
 1. **Obtain certificates** from your CA or use Let's Encrypt
 2. **Store certificates** securely with appropriate permissions:
+
    ```bash
    sudo mkdir -p /etc/herakles/certs
    sudo chmod 700 /etc/herakles/certs
    sudo cp server.crt server.key /etc/herakles/certs/
    sudo chmod 600 /etc/herakles/certs/server.key
    ```
+
 3. **Configure the exporter**:
+
    ```yaml
    enable_tls: true
    tls_cert_path: "/etc/herakles/certs/server.crt"
@@ -455,4 +458,4 @@ enable_pprof: true
 
 ## 🔗 Project & Support
 
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

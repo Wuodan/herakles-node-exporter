@@ -25,18 +25,14 @@ use axum::{routing::get, Router};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
 use herakles_node_exporter::{AppConfig as HealthAppConfig, BufferHealthConfig, HealthState};
+use nix::unistd::{geteuid, setgid, setgroups, setuid, Group, User};
 use prometheus::{Gauge, Registry};
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Instant;
-use tokio::{
-    net::TcpListener,
-    signal,
-    sync::RwLock,
-};
+use tokio::{net::TcpListener, signal, sync::RwLock};
 use tracing::{debug, error, info, warn, Level};
-use nix::unistd::{geteuid, setgid, setgroups, setuid, Group, User};
 
 use cache::MetricsCache;
 use cli::{Args, Commands, LogLevel};
@@ -142,7 +138,10 @@ fn drop_privileges() {
             return;
         }
         Err(e) => {
-            debug!("Failed to lookup user 'herakles': {} - continuing as root", e);
+            debug!(
+                "Failed to lookup user 'herakles': {} - continuing as root",
+                e
+            );
             return;
         }
     };
@@ -196,10 +195,13 @@ fn drop_privileges() {
         "✅ Privileges dropped to user '{}' (uid={}, gid={})",
         user.name, user.uid, group.gid
     );
-    
+
     // Verify /proc access after drop using metadata check
     if let Err(e) = std::fs::metadata("/proc/1/smaps_rollup") {
-        error!("❌ After privilege drop: Cannot access /proc/1/smaps_rollup: {}", e);
+        error!(
+            "❌ After privilege drop: Cannot access /proc/1/smaps_rollup: {}",
+            e
+        );
         error!("   Only user-owned processes will be monitored!");
         error!("   Recommendation: Reinstall without 'herakles' user or run as root");
     }
@@ -245,7 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Commands::CheckRequirements { ebpf } => {
                 println!("🔍 Checking Runtime Requirements");
                 println!("================================\n");
-                
+
                 match startup_checks::validate_requirements(*ebpf) {
                     Ok(_) => {
                         println!("\n✅ All requirements met - ready for production!");

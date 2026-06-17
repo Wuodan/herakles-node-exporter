@@ -79,6 +79,7 @@ sudo apt install ./target/debian/herakles-node-exporter_*.deb
 ### Package Contents
 
 The Debian package installs:
+
 - `/usr/bin/herakles-node-exporter` - Main binary
 - `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
 - `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
@@ -281,6 +282,7 @@ herakles-node-exporter check --all
 ```
 
 Expected output:
+
 ```
 🔍 Herakles Process Memory Exporter - System Check
 ===================================================
@@ -375,4 +377,4 @@ uname -r
 
 ## 🔗 Project & Support
 
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

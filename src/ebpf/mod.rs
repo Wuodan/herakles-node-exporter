@@ -337,10 +337,10 @@ impl EbpfManager {
     }
 
     /// Records elapsed time in nanoseconds to the eBPF CPU time counter.
-    /// 
+    ///
     /// This performs a lock-free atomic operation on the counter itself, though we briefly
     /// acquire the mutex to safely access the Option<EbpfInner>.
-    /// 
+    ///
     /// # Parameters
     /// * `elapsed_nanos` - Elapsed time in nanoseconds (u64). Note that callers typically
     ///   cast from u128 (as_nanos() return type) to u64, which is safe for realistic
@@ -349,7 +349,9 @@ impl EbpfManager {
     fn record_ebpf_cpu_time(&self, elapsed_nanos: u64) {
         if let Ok(inner) = self.inner.lock() {
             if let Some(ref inner) = *inner {
-                inner.ebpf_cpu_seconds_total.fetch_add(elapsed_nanos, Ordering::Relaxed);
+                inner
+                    .ebpf_cpu_seconds_total
+                    .fetch_add(elapsed_nanos, Ordering::Relaxed);
             }
         }
     }
@@ -363,7 +365,7 @@ impl EbpfManager {
         #[cfg(feature = "ebpf")]
         {
             let start = Instant::now();
-            
+
             let stats = {
                 let inner = self.inner.lock().unwrap();
                 if let Some(ref inner) = *inner {
@@ -401,14 +403,14 @@ impl EbpfManager {
                             }
                         }
                     }
-                    
+
                     Some(stats)
                 } else {
                     None
                 }
                 // Lock is automatically released here
             };
-            
+
             // Atomically update CPU time without holding the main lock
             let elapsed_nanos = start.elapsed().as_nanos() as u64;
             self.record_ebpf_cpu_time(elapsed_nanos);
@@ -431,7 +433,7 @@ impl EbpfManager {
         #[cfg(feature = "ebpf")]
         {
             let start = Instant::now();
-            
+
             let stats = {
                 let inner = self.inner.lock().unwrap();
                 if let Some(ref inner) = *inner {
@@ -468,14 +470,14 @@ impl EbpfManager {
                             }
                         }
                     }
-                    
+
                     Some(stats)
                 } else {
                     None
                 }
                 // Lock is automatically released here
             };
-            
+
             // Atomically update CPU time without holding the main lock
             let elapsed_nanos = start.elapsed().as_nanos() as u64;
             self.record_ebpf_cpu_time(elapsed_nanos);
@@ -618,7 +620,7 @@ impl EbpfManager {
                     &mut inner.last_event_count,
                 );
                 let map_usage = Self::calculate_map_usage(&inner.object);
-                
+
                 // Convert nanoseconds to seconds for export
                 // Note: u64 -> f64 conversion may lose precision for very large values,
                 // but this is acceptable for a performance metric (maintains ~15 significant digits)
@@ -828,17 +830,17 @@ mod tests {
         // Verify performance stats structure includes all required fields
         let manager = EbpfManager::new().unwrap();
         let perf_stats = manager.get_performance_stats();
-        
+
         // Verify that performance stats has the expected structure
         // The enabled field can be false if eBPF isn't available
         let _ = perf_stats.enabled;
-        
+
         // Should have events_processed_total field
         let _events_total = perf_stats.events_processed_total;
-        
+
         // Should have ebpf_cpu_seconds_total field (new field we added)
         let _cpu_seconds = perf_stats.ebpf_cpu_seconds_total;
-        
+
         // Should have other expected fields
         assert!(perf_stats.events_per_sec >= 0.0);
         let _lost_events = perf_stats.lost_events_total;

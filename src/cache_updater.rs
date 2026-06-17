@@ -401,10 +401,7 @@ pub async fn update_cache(state: &SharedState) -> Result<(), Box<dyn std::error:
         agg.process_count += 1;
 
         // Store process reference for top-N calculation
-        processes_by_subgroup
-            .entry(key)
-            .or_insert_with(Vec::new)
-            .push(p);
+        processes_by_subgroup.entry(key).or_default().push(p);
     }
 
     let subgroups_count = aggregated_by_subgroup.len() as u64;

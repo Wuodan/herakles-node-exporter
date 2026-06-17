@@ -8,21 +8,11 @@ pub const ENTRY_SIZE_BYTES: usize = 256;
 
 /// Top process information stored in ringbuffer (24 bytes per entry).
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TopProcessInfo {
     pub pid: u32,       // 4 bytes - Process ID
     pub value: u32,     // 4 bytes - Value in KB (for memory) or scaled (for CPU)
     pub name: [u8; 16], // 16 bytes - Null-terminated process name
-}
-
-impl Default for TopProcessInfo {
-    fn default() -> Self {
-        Self {
-            pid: 0,
-            value: 0,
-            name: [0; 16],
-        }
-    }
 }
 
 impl TopProcessInfo {

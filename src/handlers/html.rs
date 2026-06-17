@@ -260,9 +260,7 @@ async fn render_interactive_table(state: SharedState, subgroup_name: &str) -> Ht
     // Parse subgroup_name once (format: "group:subgroup")
     let subgroup_parts: Vec<&str> = subgroup_name.split(':').collect();
     if subgroup_parts.len() != 2 {
-        return Html(format!(
-            r#"<!DOCTYPE html><html><body><h1>Error</h1><p>Invalid subgroup format. Expected "group:subgroup"</p></body></html>"#
-        ));
+        return Html(r#"<!DOCTYPE html><html><body><h1>Error</h1><p>Invalid subgroup format. Expected "group:subgroup"</p></body></html>"#.to_string());
     }
     let expected_group = subgroup_parts[0];
     let expected_subgroup = subgroup_parts[1];
@@ -744,7 +742,7 @@ function collapseAll() {
         html.push_str("<details>\n");
         html.push_str(&format!("<summary>{}</summary>\n", subgroup_name));
         html.push_str(r#"<div class="subgroup-content">"#);
-        html.push_str("\n");
+        html.push('\n');
 
         if !subgroup_processes.is_empty() {
             html.push_str("<h3>Current Live Snapshot</h3>\n");
@@ -807,7 +805,7 @@ function collapseAll() {
                 r#"<table id="table-{}" class="sortable-process-table">"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
 
             // Table header
             html.push_str("<thead>\n<tr>\n");
@@ -815,62 +813,62 @@ function collapseAll() {
                 r#"  <th onclick="sortSubgroupTable('{}', 'rank')">#</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'pid')">PID</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'name')">Name</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'timestamp')">Timestamp</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'cpu')" class="sorted-desc">CPU%</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'rss')">RSS</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'pss')">PSS</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'uss')">USS</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'blkio-read')">Blk Read</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'blkio-write')">Blk Write</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'net-rx')">Net RX</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str(&format!(
                 r#"  <th onclick="sortSubgroupTable('{}', 'net-tx')">Net TX</th>"#,
                 table_id
             ));
-            html.push_str("\n");
+            html.push('\n');
             html.push_str("</tr>\n</thead>\n");
 
             // Table body with all processes
@@ -938,11 +936,11 @@ function collapseAll() {
                     current_timestamp,
                     proc.name
                 ));
-                html.push_str("\n");
+                html.push('\n');
 
                 // Rank column (will be populated by JavaScript)
                 html.push_str(r#"  <td class="rank"></td>"#);
-                html.push_str("\n");
+                html.push('\n');
 
                 // PID
                 html.push_str(&format!("  <td>{}</td>\n", proc.pid));
@@ -958,7 +956,7 @@ function collapseAll() {
                     r#"  <td class="{}">{:.2}%</td>"#,
                     cpu_class, proc.cpu_percent
                 ));
-                html.push_str("\n");
+                html.push('\n');
 
                 // RSS
                 html.push_str(&format!(
@@ -1300,7 +1298,7 @@ pub async fn html_subgroups_handler(
             format_bytes(uss),
             cpu
         ));
-        html.push_str("\n");
+        html.push('\n');
     }
 
     html.push_str("</table>\n");
@@ -1414,7 +1412,7 @@ pub async fn html_health_handler(State(state): State<SharedState>) -> impl IntoR
             r#"<tr><td>{}</td><td>{}</td><td>{}</td><td class="{}">{}</td></tr>"#,
             buffer.name, buffer.current_kb, buffer.capacity_kb, status_class, buffer.status
         ));
-        html.push_str("\n");
+        html.push('\n');
     }
 
     html.push_str("</table>\n");

@@ -15,6 +15,7 @@ These metrics are exported for each monitored process.
 | `herakles_mem_process_uss_bytes` | Gauge | Unique Set Size - Memory unique to this process |
 
 **Labels:**
+
 - `pid` - Process ID
 - `name` - Process name (from /proc/pid/comm)
 - `group` - Classification group (e.g., "db", "web")
@@ -87,6 +88,7 @@ These metrics provide totals for each group/subgroup combination.
 | `herakles_cpu_group_seconds_total` | Gauge | Total CPU time seconds per subgroup |
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `mode` - CPU mode (user, for cpu_group_seconds_total)
@@ -133,6 +135,7 @@ These metrics show the top N processes by USS within each subgroup.
 | `herakles_cpu_top_process_seconds_total` | Gauge | Top-3 CPU time seconds per subgroup |
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position (1, 2, 3, ...)
@@ -212,6 +215,7 @@ These metrics provide information about overall system resources.
 | `herakles_cpu_system_psi_wait_seconds_total` | Gauge | CPU Pressure Stall Information (PSI) total seconds |
 
 **Labels:**
+
 - `cpu` - CPU identifier (e.g., "cpu" for total, "cpu0", "cpu1" for individual cores)
 
 **Example output:**
@@ -289,17 +293,20 @@ High cardinality can cause performance issues in Prometheus. Consider these stra
 ### Controlling Cardinality
 
 1. **Limit Top-N metrics:**
+
    ```yaml
    top_n_subgroup: 3      # Only top 3 per subgroup
    top_n_others: 10       # Limit "other" group
    ```
 
 2. **Filter by USS threshold:**
+
    ```yaml
    min_uss_kb: 1024       # Skip processes with < 1MB USS
    ```
 
 3. **Use search filters:**
+
    ```yaml
    search_mode: "include"
    search_groups:
@@ -309,6 +316,7 @@ High cardinality can cause performance issues in Prometheus. Consider these stra
    ```
 
 4. **Disable unused metrics:**
+
    ```yaml
    enable_rss: false      # If you only need USS
    enable_cpu: false      # If you don't need CPU metrics

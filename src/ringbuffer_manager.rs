@@ -4,9 +4,9 @@
 //! of ringbuffers, one per subgroup, with deterministic memory allocation.
 
 use crate::config::RingbufferConfig;
-use crate::ringbuffer::{Ringbuffer, RingbufferEntry, ENTRY_SIZE_BYTES};
 #[cfg(test)]
 use crate::ringbuffer::TopProcessInfo;
+use crate::ringbuffer::{Ringbuffer, RingbufferEntry, ENTRY_SIZE_BYTES};
 use dashmap::DashMap;
 use serde::Serialize;
 
@@ -105,7 +105,10 @@ impl RingbufferManager {
     ///
     /// Returns None if the subgroup doesn't exist.
     /// This allows access to ringbuffer methods like len() and capacity().
-    pub fn get_subgroup_buffer(&self, subgroup: &str) -> Option<dashmap::mapref::one::Ref<'_, String, Ringbuffer>> {
+    pub fn get_subgroup_buffer(
+        &self,
+        subgroup: &str,
+    ) -> Option<dashmap::mapref::one::Ref<'_, String, Ringbuffer>> {
         self.buffers.get(subgroup)
     }
 

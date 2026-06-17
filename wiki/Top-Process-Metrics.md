@@ -7,6 +7,7 @@ This document describes the top-N process metrics exported by the Herakles Node 
 The top process metrics system identifies and tracks the top-3 processes by resource consumption within each group/subgroup. These metrics help you quickly identify resource bottlenecks and monitor the most significant processes in your infrastructure.
 
 **Key Features:**
+
 - Tracks top-3 processes per group/subgroup by different resource dimensions (CPU, Memory, Disk I/O, Network I/O)
 - Includes both current usage (gauges) and cumulative totals (counters)
 - Provides process identification via PID and command name
@@ -23,6 +24,7 @@ The top process metrics system identifies and tracks the top-3 processes by reso
 This metric shows the CPU usage percentage of the most CPU-intensive processes. A value of 0.5 means the process is using 50% of a single CPU core. Values can exceed 1.0 on multi-core systems.
 
 **Labels:**
+
 - `group` - Classification group (e.g., "db", "web", "container")
 - `subgroup` - Classification subgroup (e.g., "postgres", "nginx", "docker")
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -30,6 +32,7 @@ This metric shows the CPU usage percentage of the most CPU-intensive processes. 
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_cpu_process_usage_ratio Top-3 processes by CPU usage ratio (0.0 to 1.0) within group/subgroup
 # TYPE herakles_top_cpu_process_usage_ratio gauge
@@ -40,6 +43,7 @@ herakles_top_cpu_process_usage_ratio{group="web",subgroup="nginx",rank="1",pid="
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Find all rank-1 (highest CPU) processes across all subgroups
 herakles_top_cpu_process_usage_ratio{rank="1"}
@@ -60,6 +64,7 @@ herakles_top_cpu_process_usage_ratio{group="db"}
 This counter metric tracks the total CPU time consumed by top processes since they started. Useful for identifying long-running processes and analyzing CPU consumption trends over time.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -68,6 +73,7 @@ This counter metric tracks the total CPU time consumed by top processes since th
 - `mode` - CPU mode: "user" or "system"
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_cpu_process_seconds_total Cumulative CPU time in seconds for top-3 CPU processes within group/subgroup
 # TYPE herakles_top_cpu_process_seconds_total counter
@@ -78,6 +84,7 @@ herakles_top_cpu_process_seconds_total{group="web",subgroup="nginx",rank="1",pid
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # CPU time growth rate for top processes (seconds per second)
 rate(herakles_top_cpu_process_seconds_total[5m])
@@ -100,6 +107,7 @@ herakles_top_cpu_process_seconds_total{subgroup="nginx",rank="1"}
 RSS represents the portion of a process's memory that is held in RAM. This includes all stack and heap memory, shared libraries that are currently in RAM, and memory-mapped files.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -107,6 +115,7 @@ RSS represents the portion of a process's memory that is held in RAM. This inclu
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_mem_process_rss_bytes Top-3 processes by Resident Set Size (RSS) within group/subgroup
 # TYPE herakles_top_mem_process_rss_bytes gauge
@@ -117,6 +126,7 @@ herakles_top_mem_process_rss_bytes{group="container",subgroup="docker",rank="1",
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Top memory consumers in GB
 herakles_top_mem_process_rss_bytes / 1024 / 1024 / 1024
@@ -137,6 +147,7 @@ herakles_top_mem_process_rss_bytes > 1073741824
 PSS is a more accurate memory accounting metric than RSS. It divides the size of shared memory pages proportionally among the processes sharing them. PSS provides a better estimate of a process's actual memory footprint.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -144,6 +155,7 @@ PSS is a more accurate memory accounting metric than RSS. It divides the size of
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_mem_process_pss_bytes Top-3 processes by Proportional Set Size (PSS) within group/subgroup
 # TYPE herakles_top_mem_process_pss_bytes gauge
@@ -153,6 +165,7 @@ herakles_top_mem_process_pss_bytes{group="db",subgroup="postgres",rank="3",pid="
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Compare RSS vs PSS for shared memory analysis
 herakles_top_mem_process_rss_bytes - herakles_top_mem_process_pss_bytes
@@ -175,6 +188,7 @@ herakles_top_mem_process_pss_bytes{rank="1"} / 1024 / 1024
 Tracks the total number of bytes read from block storage devices (disks, SSDs) by processes. This counter includes all read operations regardless of caching.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -182,6 +196,7 @@ Tracks the total number of bytes read from block storage devices (disks, SSDs) b
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_blkio_process_read_bytes_total Cumulative bytes read from block devices by top-3 processes within group/subgroup
 # TYPE herakles_top_blkio_process_read_bytes_total counter
@@ -191,6 +206,7 @@ herakles_top_blkio_process_read_bytes_total{group="backup",subgroup="bacula",ran
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Disk read rate in bytes per second
 rate(herakles_top_blkio_process_read_bytes_total[5m])
@@ -214,6 +230,7 @@ rate(herakles_top_blkio_process_read_bytes_total[1m]) > 104857600
 Tracks the total number of bytes written to block storage devices. This is crucial for monitoring write-heavy workloads and identifying processes causing disk wear on SSDs.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -221,6 +238,7 @@ Tracks the total number of bytes written to block storage devices. This is cruci
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_blkio_process_write_bytes_total Cumulative bytes written to block devices by top-3 processes within group/subgroup
 # TYPE herakles_top_blkio_process_write_bytes_total counter
@@ -230,6 +248,7 @@ herakles_top_blkio_process_write_bytes_total{group="logging",subgroup="elasticse
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Disk write rate in bytes per second
 rate(herakles_top_blkio_process_write_bytes_total[5m])
@@ -257,6 +276,7 @@ These metrics require **eBPF support** to be enabled. See the [eBPF Configuratio
 Tracks network receive (RX) traffic at the process level using eBPF tracing. This provides visibility into which processes are consuming network bandwidth for incoming data.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -264,6 +284,7 @@ Tracks network receive (RX) traffic at the process level using eBPF tracing. Thi
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_net_process_rx_bytes_total Cumulative bytes received by top-3 network processes within group/subgroup
 # TYPE herakles_top_net_process_rx_bytes_total counter
@@ -273,6 +294,7 @@ herakles_top_net_process_rx_bytes_total{group="db",subgroup="postgres",rank="1",
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Network RX rate in bytes per second
 rate(herakles_top_net_process_rx_bytes_total[5m])
@@ -296,6 +318,7 @@ rate(herakles_top_net_process_rx_bytes_total[1m]) * 8 > 100000000
 Tracks network transmit (TX) traffic at the process level. Essential for monitoring data egress, identifying bandwidth-heavy applications, and understanding network usage patterns.
 
 **Labels:**
+
 - `group` - Classification group
 - `subgroup` - Classification subgroup
 - `rank` - Ranking position: "1" (highest), "2", "3"
@@ -303,6 +326,7 @@ Tracks network transmit (TX) traffic at the process level. Essential for monitor
 - `comm` - Process command name from `/proc/[pid]/comm`
 
 **Example output:**
+
 ```prometheus
 # HELP herakles_top_net_process_tx_bytes_total Cumulative bytes transmitted by top-3 network processes within group/subgroup
 # TYPE herakles_top_net_process_tx_bytes_total counter
@@ -312,6 +336,7 @@ herakles_top_net_process_tx_bytes_total{group="messaging",subgroup="kafka",rank=
 ```
 
 **Example PromQL Queries:**
+
 ```promql
 # Network TX rate in bytes per second
 rate(herakles_top_net_process_tx_bytes_total[5m])
@@ -352,6 +377,7 @@ Understanding where metrics come from helps with troubleshooting and performance
 | eBPF | Network RX/TX | Low-Medium | CAP_BPF + CAP_PERFMON or root |
 
 **Note:** eBPF-based network metrics require:
+
 - Linux kernel ≥ 4.18 with BTF support
 - eBPF feature enabled at compile time (`--features ebpf`)
 - eBPF feature enabled in configuration
@@ -387,11 +413,13 @@ Top-N metrics can contribute to high cardinality in Prometheus. Consider:
 **Per metric cardinality:** `groups × subgroups × top_n × metric_types`
 
 Example calculations:
+
 - 10 subgroups × 3 top processes × 8 metric types = ~240 time series
 - 50 subgroups × 3 top processes × 8 metric types = ~1,200 time series
 - 100 subgroups × 5 top processes × 8 metric types = ~4,000 time series
 
 **Optimization strategies:**
+
 1. Limit `top_n_subgroup` to 3 (default)
 2. Use `search_groups` to focus on specific groups
 3. Set `min_uss_kb` to filter out small processes
@@ -512,6 +540,7 @@ The exporter provides multiple views of process metrics:
 | **Group Aggregates** | `herakles_*_group_*` | High-level resource usage by service type |
 
 **Example workflow:**
+
 1. Use **group aggregates** to identify which service type (e.g., database) is consuming resources
 2. Use **top-N metrics** to quickly find the specific high-impact processes
 3. Use **per-process metrics** for detailed analysis of identified processes
@@ -532,6 +561,7 @@ herakles_mem_process_rss_bytes{pid="1234"}
 ### Metric Collection Overhead
 
 Top-N metrics add minimal overhead because:
+
 - Rankings are computed from data already collected for per-process metrics
 - Only top-N processes are exposed (not all processes)
 - Ranking is performed in-memory during metric export
@@ -558,23 +588,27 @@ This reduces CPU overhead for frequent scrapes while maintaining reasonable fres
 If `herakles_top_net_process_*` metrics are missing:
 
 1. **Check eBPF is enabled:**
+
    ```bash
    curl http://localhost:9215/health | grep -i ebpf
    ```
 
 2. **Verify kernel support:**
+
    ```bash
    uname -r  # Should be >= 4.18
    ls /sys/kernel/btf/vmlinux  # Should exist
    ```
 
 3. **Check permissions:**
+
    ```bash
    # Run with capabilities
    sudo setcap cap_bpf,cap_perfmon=ep /usr/local/bin/herakles-node-exporter
    ```
 
 4. **Review logs:**
+
    ```bash
    journalctl -u herakles-node-exporter | grep -i ebpf
    ```
@@ -592,17 +626,20 @@ If process rankings are unstable:
 If Prometheus shows cardinality problems:
 
 1. **Reduce top_n_subgroup:**
+
    ```yaml
    top_n_subgroup: 2  # Track only top 2 instead of 3
    ```
 
 2. **Filter groups:**
+
    ```yaml
    search_mode: "include"
    search_groups: ["db", "web"]  # Only track critical groups
    ```
 
 3. **Drop unused metrics in Prometheus:**
+
    ```yaml
    metric_relabel_configs:
      - source_labels: [__name__]

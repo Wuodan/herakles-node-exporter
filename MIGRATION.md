@@ -230,6 +230,7 @@ Starting from version 0.1.0 with eBPF support, the following new metrics are ava
 ### eBPF Process I/O Metrics
 
 These metrics provide per-process I/O tracking via eBPF and are only available when:
+
 - Built with `--features ebpf`
 - `enable_ebpf: true` in configuration
 - Kernel >= 4.18 with BTF support
@@ -266,6 +267,7 @@ enable_tcp_tracking: true
 ### Graceful Degradation
 
 If eBPF cannot be initialized (old kernel, missing BTF, insufficient permissions):
+
 - The exporter logs a warning and continues
 - All standard metrics continue to work normally
 - eBPF metrics are simply not exported

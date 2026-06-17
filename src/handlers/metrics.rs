@@ -128,7 +128,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
 
             let entry = group_aggregations
                 .entry((group.to_string(), subgroup.to_string()))
-                .or_insert_with(GroupMetrics::default);
+                .or_default();
 
             entry.rss_sum += p.rss;
             entry.pss_sum += p.pss;
@@ -183,21 +183,23 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
             // NOTE: Current ProcMem.cpu_time_seconds is total time.
             // Splitting into user/system requires parsing /proc/[pid]/stat
             // separately. This is a future enhancement.
-            // 
+            //
             // For counters, we reset and then increment by the total value
             // since we're reporting cumulative CPU time from /proc
-            let user_counter = state
-                .metrics
-                .group_cpu_seconds_total
-                .with_label_values(&[group.as_str(), subgroup.as_str(), "user"]);
+            let user_counter = state.metrics.group_cpu_seconds_total.with_label_values(&[
+                group.as_str(),
+                subgroup.as_str(),
+                "user",
+            ]);
             user_counter.reset();
             user_counter.inc_by(metrics.cpu_time_user_sum);
 
             // CPU time in seconds (system mode) - placeholder
-            let system_counter = state
-                .metrics
-                .group_cpu_seconds_total
-                .with_label_values(&[group.as_str(), subgroup.as_str(), "system"]);
+            let system_counter = state.metrics.group_cpu_seconds_total.with_label_values(&[
+                group.as_str(),
+                subgroup.as_str(),
+                "system",
+            ]);
             system_counter.reset();
             system_counter.inc_by(metrics.cpu_time_system_sum);
         }
@@ -235,21 +237,21 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                         .with_label_values(&[&group, &subgroup]);
                     read_bytes_counter.reset();
                     read_bytes_counter.inc_by(read_bytes as f64);
-                    
+
                     let write_bytes_counter = state
                         .metrics
                         .group_blkio_write_bytes_total
                         .with_label_values(&[&group, &subgroup]);
                     write_bytes_counter.reset();
                     write_bytes_counter.inc_by(write_bytes as f64);
-                    
+
                     let read_ops_counter = state
                         .metrics
                         .group_blkio_read_syscalls_total
                         .with_label_values(&[&group, &subgroup]);
                     read_ops_counter.reset();
                     read_ops_counter.inc_by(read_ops as f64);
-                    
+
                     let write_ops_counter = state
                         .metrics
                         .group_blkio_write_syscalls_total
@@ -509,11 +511,14 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
     match system::read_stat_counters() {
         Ok((boot_time, context_switches, forks)) => {
             state.metrics.system_boot_time_seconds.set(boot_time as f64);
-            
+
             // For counters, use reset + inc_by pattern
             state.metrics.system_context_switches_total.reset();
-            state.metrics.system_context_switches_total.inc_by(context_switches as f64);
-            
+            state
+                .metrics
+                .system_context_switches_total
+                .inc_by(context_switches as f64);
+
             state.metrics.system_forks_total.reset();
             state.metrics.system_forks_total.inc_by(forks as f64);
         }
@@ -565,15 +570,24 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
         // PSI metrics are cumulative totals from the kernel, so we use counters
         if let Ok(cpu_psi) = system::read_psi_some_total("/proc/pressure/cpu") {
             state.metrics.system_cpu_psi_wait_seconds_total.reset();
-            state.metrics.system_cpu_psi_wait_seconds_total.inc_by(cpu_psi);
+            state
+                .metrics
+                .system_cpu_psi_wait_seconds_total
+                .inc_by(cpu_psi);
         }
         if let Ok(mem_psi) = system::read_psi_some_total("/proc/pressure/memory") {
             state.metrics.system_memory_psi_wait_seconds_total.reset();
-            state.metrics.system_memory_psi_wait_seconds_total.inc_by(mem_psi);
+            state
+                .metrics
+                .system_memory_psi_wait_seconds_total
+                .inc_by(mem_psi);
         }
         if let Ok(io_psi) = system::read_psi_some_total("/proc/pressure/io") {
             state.metrics.system_disk_psi_wait_seconds_total.reset();
-            state.metrics.system_disk_psi_wait_seconds_total.inc_by(io_psi);
+            state
+                .metrics
+                .system_disk_psi_wait_seconds_total
+                .inc_by(io_psi);
         }
     }
 
@@ -629,17 +643,50 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
         if state.config.enable_tcp_tracking.unwrap_or(true) {
             match ebpf.read_tcp_stats() {
                 Ok(tcp_stats) => {
-                    state.metrics.system_tcp_connections_established.set(tcp_stats.established as f64);
-                    state.metrics.system_tcp_connections_syn_sent.set(tcp_stats.syn_sent as f64);
-                    state.metrics.system_tcp_connections_syn_recv.set(tcp_stats.syn_recv as f64);
-                    state.metrics.system_tcp_connections_fin_wait1.set(tcp_stats.fin_wait1 as f64);
-                    state.metrics.system_tcp_connections_fin_wait2.set(tcp_stats.fin_wait2 as f64);
-                    state.metrics.system_tcp_connections_time_wait.set(tcp_stats.time_wait as f64);
-                    state.metrics.system_tcp_connections_close.set(tcp_stats.close as f64);
-                    state.metrics.system_tcp_connections_close_wait.set(tcp_stats.close_wait as f64);
-                    state.metrics.system_tcp_connections_last_ack.set(tcp_stats.last_ack as f64);
-                    state.metrics.system_tcp_connections_listen.set(tcp_stats.listen as f64);
-                    state.metrics.system_tcp_connections_closing.set(tcp_stats.closing as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_established
+                        .set(tcp_stats.established as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_syn_sent
+                        .set(tcp_stats.syn_sent as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_syn_recv
+                        .set(tcp_stats.syn_recv as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_fin_wait1
+                        .set(tcp_stats.fin_wait1 as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_fin_wait2
+                        .set(tcp_stats.fin_wait2 as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_time_wait
+                        .set(tcp_stats.time_wait as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_close
+                        .set(tcp_stats.close as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_close_wait
+                        .set(tcp_stats.close_wait as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_last_ack
+                        .set(tcp_stats.last_ack as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_listen
+                        .set(tcp_stats.listen as f64);
+                    state
+                        .metrics
+                        .system_tcp_connections_closing
+                        .set(tcp_stats.closing as f64);
                 }
                 Err(e) => {
                     warn!("Failed to read TCP connection statistics: {}", e);
@@ -652,23 +699,35 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
     #[cfg(feature = "ebpf")]
     if let Some(ebpf) = &state.ebpf {
         let perf_stats = ebpf.get_performance_stats();
-        
+
         if perf_stats.enabled {
             // For counters, use reset + inc_by pattern to set absolute cumulative values
             // Total cumulative events processed
             state.metrics.ebpf_events_processed_total.reset();
-            state.metrics.ebpf_events_processed_total.inc_by(perf_stats.events_processed_total as f64);
-            
+            state
+                .metrics
+                .ebpf_events_processed_total
+                .inc_by(perf_stats.events_processed_total as f64);
+
             // Total events dropped/lost
             state.metrics.ebpf_events_dropped_total.reset();
-            state.metrics.ebpf_events_dropped_total.inc_by(perf_stats.lost_events_total as f64);
-            
+            state
+                .metrics
+                .ebpf_events_dropped_total
+                .inc_by(perf_stats.lost_events_total as f64);
+
             // Number of loaded eBPF programs (gauge - keep as-is)
-            state.metrics.ebpf_maps_count.set(perf_stats.programs_loaded as f64);
-            
+            state
+                .metrics
+                .ebpf_maps_count
+                .set(perf_stats.programs_loaded as f64);
+
             // CPU seconds - now properly tracking actual CPU time spent
             state.metrics.ebpf_cpu_seconds_total.reset();
-            state.metrics.ebpf_cpu_seconds_total.inc_by(perf_stats.ebpf_cpu_seconds_total);
+            state
+                .metrics
+                .ebpf_cpu_seconds_total
+                .inc_by(perf_stats.ebpf_cpu_seconds_total);
         }
     }
 

@@ -154,6 +154,7 @@ Metrics are defined in `src/main.rs` in the `MemoryMetrics` struct.
 ### Steps
 
 1. **Add field to struct**:
+
 ```rust
 struct MemoryMetrics {
     // Existing metrics...
@@ -163,7 +164,8 @@ struct MemoryMetrics {
 }
 ```
 
-2. **Create and register in `new()`**:
+1. **Create and register in `new()`**:
+
 ```rust
 fn new(registry: &Registry) -> Result<Self, Box<dyn std::error::Error>> {
     // Existing metrics...
@@ -185,7 +187,8 @@ fn new(registry: &Registry) -> Result<Self, Box<dyn std::error::Error>> {
 }
 ```
 
-3. **Add to `reset()`**:
+1. **Add to `reset()`**:
+
 ```rust
 fn reset(&self) {
     // Existing resets...
@@ -193,7 +196,8 @@ fn reset(&self) {
 }
 ```
 
-4. **Update in handler**:
+1. **Update in handler**:
+
 ```rust
 // In metrics_handler
 state.metrics.new_metric
@@ -265,17 +269,22 @@ mod tests {
 
 1. **Fork the repository**
 2. **Create a feature branch**:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
+
 3. **Make your changes**
 4. **Run tests**:
+
    ```bash
    cargo test
    cargo fmt -- --check
    cargo clippy -- -D warnings
    ```
+
 5. **Commit with clear message**:
+
    ```bash
    git commit -m "feat: add support for XYZ database"
    ```
@@ -293,6 +302,7 @@ Follow conventional commits:
 ```
 
 Types:
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation only
@@ -302,6 +312,7 @@ Types:
 - `chore`: Maintenance tasks
 
 Examples:
+
 ```
 feat(subgroups): add support for ScyllaDB
 fix(parser): handle empty smaps_rollup file
@@ -338,17 +349,20 @@ Brief description of the changes.
 ### Version Bump
 
 1. Update version in `Cargo.toml`:
+
    ```toml
    [package]
    version = "0.2.0"
    ```
 
 2. Update version in `main.rs`:
+
    ```rust
    #[command(version = "0.2.0")]
    ```
 
 3. Create git tag:
+
    ```bash
    git tag v0.2.0
    git push origin v0.2.0
@@ -368,7 +382,7 @@ Brief description of the changes.
 - **Questions**: Open a GitHub issue with `[Question]` prefix
 - **Bugs**: Open a GitHub issue with reproduction steps
 - **Feature requests**: Open a GitHub issue with `[Feature]` prefix
-- **Contact**: exporter@herakles.now
+- **Contact**: <exporter@herakles.now>
 
 ## Code of Conduct
 
@@ -389,4 +403,4 @@ By contributing, you agree that your contributions will be licensed under the sa
 
 ## 🔗 Project & Support
 
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

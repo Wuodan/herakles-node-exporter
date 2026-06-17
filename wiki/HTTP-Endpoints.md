@@ -37,6 +37,7 @@ By default, the exporter listens on **port `9215`** and binds to **`0.0.0.0`**.
 - **Cache:** No
 
 The landing page of the exporter. Displays:
+
 - Current exporter version
 - Uptime since start
 - A clickable list of all available endpoints with short descriptions
@@ -121,6 +122,7 @@ curl http://localhost:9215/health
 Displays the **active runtime configuration** of the exporter as a formatted text table. This is a read-only view — no configuration changes can be made via this endpoint.
 
 Shows all resolved configuration values including:
+
 - Server settings (bind address, port)
 - Cache TTL
 - Filtering settings (min_uss_kb, search_mode, top_n_*)
@@ -162,6 +164,7 @@ curl http://localhost:9215/subgroups
 - **Authentication:** None
 
 Returns a comprehensive plain-text reference document covering:
+
 - All available metrics and their labels
 - Configuration options
 - CLI commands
@@ -203,6 +206,7 @@ curl http://localhost:9215/docs
 - **Authentication:** None
 
 Exposes internal ring buffer statistics and scrape history data. Useful for:
+
 - Diagnosing scrape latency trends
 - Inspecting per-subgroup historical data
 - Performance debugging
@@ -340,4 +344,4 @@ curl http://localhost:9215/details
 
 ## 🔗 Project & Support
 
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

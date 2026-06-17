@@ -9,6 +9,7 @@ This guide covers common issues and solutions for the Herakles Process Memory Ex
 **Problem:** Exporter fails with "Permission denied" errors when reading `/proc`.
 
 **Symptoms:**
+
 ```
 Error: Permission denied reading /proc/1234/smaps
 ```
@@ -16,16 +17,19 @@ Error: Permission denied reading /proc/1234/smaps
 **Solutions:**
 
 1. **Run as root (not recommended for production):**
+
    ```bash
    sudo herakles-node-exporter
    ```
 
 2. **Add capability (recommended):**
+
    ```bash
    sudo setcap cap_dac_read_search+ep /usr/local/bin/herakles-node-exporter
    ```
 
 3. **Use systemd with capabilities:**
+
    ```ini
    [Service]
    User=prometheus
@@ -34,6 +38,7 @@ Error: Permission denied reading /proc/1234/smaps
    ```
 
 4. **Container deployment:**
+
    ```yaml
    # docker-compose.yml
    services:
@@ -49,6 +54,7 @@ Error: Permission denied reading /proc/1234/smaps
 **Problem:** Metrics show zero processes or empty output.
 
 **Diagnosis:**
+
 ```bash
 # Check system requirements
 herakles-node-exporter check --all
@@ -60,6 +66,7 @@ herakles-node-exporter --log-level debug
 **Common Causes:**
 
 1. **Filter too restrictive:**
+
    ```yaml
    # Problem: Only processes > 10GB USS included
    min_uss_kb: 10485760
@@ -69,6 +76,7 @@ herakles-node-exporter --log-level debug
    ```
 
 2. **Search filter mismatch:**
+
    ```yaml
    # Problem: No matching groups
    search_mode: "include"
@@ -80,6 +88,7 @@ herakles-node-exporter --log-level debug
    ```
 
 3. **All processes filtered as "other":**
+
    ```yaml
    # Problem: Disabled other group with no matches
    disable_others: true
@@ -96,6 +105,7 @@ herakles-node-exporter --log-level debug
 **Problem:** Prometheus complaining about too many time series.
 
 **Symptoms:**
+
 ```
 err="add 150000 samples: out of order sample"
 level=warn msg="Reached 1M active series limit"
@@ -104,17 +114,20 @@ level=warn msg="Reached 1M active series limit"
 **Solutions:**
 
 1. **Reduce Top-N settings:**
+
    ```yaml
    top_n_subgroup: 3      # Only top 3 per subgroup
    top_n_others: 5        # Limit "other" group
    ```
 
 2. **Increase USS threshold:**
+
    ```yaml
    min_uss_kb: 10240      # Only processes with >= 10MB USS
    ```
 
 3. **Use search filters:**
+
    ```yaml
    search_mode: "include"
    search_groups:
@@ -124,6 +137,7 @@ level=warn msg="Reached 1M active series limit"
    ```
 
 4. **Disable unused metrics:**
+
    ```yaml
    enable_rss: true
    enable_pss: false      # Disable if not needed
@@ -136,6 +150,7 @@ level=warn msg="Reached 1M active series limit"
 **Problem:** Prometheus scrapes timing out or taking too long.
 
 **Symptoms:**
+
 ```
 level=warn msg="Scrape of target failed" err="context deadline exceeded"
 ```
@@ -143,11 +158,13 @@ level=warn msg="Scrape of target failed" err="context deadline exceeded"
 **Solutions:**
 
 1. **Increase cache TTL:**
+
    ```yaml
    cache_ttl: 120         # Cache for 2 minutes
    ```
 
 2. **Adjust Prometheus timeout:**
+
    ```yaml
    scrape_configs:
      - job_name: 'herakles-proc-mem'
@@ -156,17 +173,20 @@ level=warn msg="Scrape of target failed" err="context deadline exceeded"
    ```
 
 3. **Reduce process count:**
+
    ```yaml
    max_processes: 500     # Limit total processes
    min_uss_kb: 5120       # Skip small processes
    ```
 
 4. **Increase parallelism:**
+
    ```yaml
    parallelism: 8         # More threads
    ```
 
 5. **Check disk I/O:**
+
    ```bash
    # Check if /proc reads are slow
    time cat /proc/1/smaps_rollup
@@ -177,11 +197,13 @@ level=warn msg="Scrape of target failed" err="context deadline exceeded"
 **Problem:** Stale metrics or cache not updating.
 
 **Symptoms:**
+
 - Metrics not changing
 - Health endpoint shows failed updates
 - `herakles_exporter_cache_update_success = 0`
 
 **Diagnosis:**
+
 ```bash
 # Check health endpoint
 curl http://localhost:9215/health
@@ -193,16 +215,19 @@ herakles-node-exporter --log-level debug
 **Solutions:**
 
 1. **Check for errors in logs:**
+
    ```bash
    journalctl -u herakles-node-exporter -f
    ```
 
 2. **Restart the exporter:**
+
    ```bash
    sudo systemctl restart herakles-node-exporter
    ```
 
 3. **Verify /proc accessibility:**
+
    ```bash
    ls -la /proc/self/smaps_rollup
    ```
@@ -225,6 +250,7 @@ RUST_LOG=debug herakles-node-exporter
 ### Trace Logging
 
 For maximum verbosity:
+
 ```bash
 herakles-node-exporter --log-level trace
 ```
@@ -232,6 +258,7 @@ herakles-node-exporter --log-level trace
 ### Debug Endpoints
 
 Enable pprof for performance profiling:
+
 ```yaml
 enable_pprof: true
 ```
@@ -420,6 +447,7 @@ cache_ttl: 120
 ### How do I add monitoring for custom processes?
 
 Create `/etc/herakles/subgroups.toml`:
+
 ```toml
 subgroups = [
   { group = "myapp", subgroup = "api", matches = ["myapp-api"] },
@@ -429,21 +457,25 @@ subgroups = [
 ## Getting Help
 
 1. **Check logs first:**
+
    ```bash
    journalctl -u herakles-node-exporter --since "1 hour ago"
    ```
 
 2. **Enable debug mode:**
+
    ```bash
    herakles-node-exporter --log-level debug
    ```
 
 3. **Run system check:**
+
    ```bash
    herakles-node-exporter check --all
    ```
 
 4. **Check configuration:**
+
    ```bash
    herakles-node-exporter --check-config
    herakles-node-exporter --show-config
@@ -462,4 +494,4 @@ subgroups = [
 
 ## 🔗 Project & Support
 
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

@@ -104,6 +104,7 @@ parallelism: 4
 ## Limiting Cardinality with Top-N
 
 High cardinality (many unique label combinations) can cause:
+
 - Increased Prometheus memory usage
 - Slower queries
 - Higher storage costs
@@ -187,6 +188,7 @@ herakles-node-exporter check --memory
 ```
 
 Output:
+
 ```
 💾 Checking memory metrics accessibility...
    ✅ smaps_rollup available (fast path)
@@ -309,6 +311,7 @@ curl http://localhost:9215/health
 ```
 
 Check these metrics:
+
 - `scan_duration (s)` - Time to scan /proc
 - `cache_update_duration (s)` - Full cache update time
 - `scanned_processes` - Number of processes scanned

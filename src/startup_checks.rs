@@ -14,7 +14,7 @@ pub fn validate_requirements(enable_ebpf: bool) -> Result<(), ValidationError> {
 
     check_user_privileges()?;
     check_proc_access()?;
-    
+
     if enable_ebpf {
         check_ebpf_requirements()?;
     }
@@ -39,7 +39,7 @@ fn check_user_privileges() -> Result<(), ValidationError> {
 fn check_proc_access() -> Result<(), ValidationError> {
     // Test reading /proc/1/smaps_rollup (systemd/init)
     let test_file = "/proc/1/smaps_rollup";
-    
+
     // Use metadata to check accessibility without reading the whole file
     match fs::metadata(test_file) {
         Ok(_) => {
@@ -113,7 +113,10 @@ fn check_ebpf_requirements() -> Result<(), ValidationError> {
 
     // Check kernel version
     if let Ok(version) = fs::read_to_string("/proc/version") {
-        debug!("Kernel version: {}", version.lines().next().unwrap_or("unknown"));
+        debug!(
+            "Kernel version: {}",
+            version.lines().next().unwrap_or("unknown")
+        );
     }
 
     info!("✅ eBPF requirements validated");
@@ -124,10 +127,10 @@ fn check_ebpf_requirements() -> Result<(), ValidationError> {
 pub enum ValidationError {
     #[error("Insufficient permissions: {0}")]
     InsufficientPermissions(String),
-    
+
     #[error("BPF filesystem not mounted at /sys/fs/bpf")]
     BpfFsNotMounted,
-    
+
     #[error("BPF filesystem not writable: {0}")]
     BpfFsNotWritable(String),
 }

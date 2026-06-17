@@ -331,10 +331,7 @@ async fn compute_live_snapshots(
     for proc in cache.processes.values() {
         let (group, subgroup) = classify_process_raw(&proc.name);
         let key = format!("{}:{}", group, subgroup);
-        subgroup_procs
-            .entry(key)
-            .or_insert_with(Vec::new)
-            .push(proc.clone());
+        subgroup_procs.entry(key).or_default().push(proc.clone());
     }
 
     // Compute snapshot for each subgroup
@@ -1055,7 +1052,12 @@ pub async fn details_handler(
         }
 
         if subgroups.len() > MAX_DISPLAYED_SUBGROUPS {
-            writeln!(out, "... and {} more subgroups", subgroups.len() - MAX_DISPLAYED_SUBGROUPS).ok();
+            writeln!(
+                out,
+                "... and {} more subgroups",
+                subgroups.len() - MAX_DISPLAYED_SUBGROUPS
+            )
+            .ok();
         }
     } else {
         writeln!(out, "No subgroups tracked yet").ok();

@@ -20,6 +20,7 @@ herakles-node-exporter/
 ### HTTP Server (Axum)
 
 The exporter uses Axum as its HTTP framework, providing:
+
 - Lightweight, high-performance async HTTP server
 - Request routing for `/metrics`, `/health`, `/config`, `/subgroups`
 - Shared state management
@@ -49,6 +50,7 @@ tokio::spawn(async move {
 ```
 
 **Benefits:**
+
 - Decouples expensive /proc scanning from HTTP requests
 - Consistent response times for /metrics endpoint
 - Configurable update frequency via `cache_ttl`
@@ -67,6 +69,7 @@ fn collect_proc_entries(root: &str, max: Option<usize>) -> Vec<ProcEntry> {
 ```
 
 **Optimizations:**
+
 - Early filtering (skip non-numeric directories)
 - Limit maximum processes (`max_processes` config)
 - Check for memory metrics availability before processing
@@ -112,6 +115,7 @@ fn get_cpu_stat_for_pid(
 ```
 
 **Key Details:**
+
 - Uses system clock ticks (CLK_TCK) for time conversion
 - Maintains per-process cache for delta calculation
 - CPU percent represents usage since last sample
@@ -133,6 +137,7 @@ fn classify_process_with_config(
 ```
 
 **Pattern Matching:**
+
 - Exact name matches from `matches` array
 - Command line patterns from `cmdline_matches`
 - Fallback to "other/other" for unmatched processes
@@ -216,6 +221,7 @@ struct MemoryMetrics {
 ### Tokio Runtime
 
 The exporter uses Tokio for async operations:
+
 - HTTP server runs on Tokio runtime
 - Background cache updater as spawned task
 - Async I/O for HTTP responses
@@ -235,6 +241,7 @@ entries
 ```
 
 **Benefits:**
+
 - Parallelizes /proc reads across CPU cores
 - Configurable thread count via `parallelism`
 - Automatic work stealing for load balancing
@@ -290,6 +297,7 @@ if let Err(e) = update_cache(&state).await {
 ### Shared Strings (Arc<str>)
 
 Process names and classification labels use `Arc<str>` for:
+
 - Reduced memory allocation
 - Efficient cloning for concurrent access
 - Immutable shared references
@@ -297,6 +305,7 @@ Process names and classification labels use `Arc<str>` for:
 ### Buffer Pooling
 
 Configurable buffer sizes for file reading:
+
 ```rust
 struct BufferConfig {
     io_kb: usize,           // Generic readers
@@ -316,6 +325,7 @@ struct BufferConfig {
 ### Single Binary
 
 All code in `main.rs` for:
+
 - Simple deployment (single binary)
 - Easy compilation and distribution
 - No module complexity for small codebase
@@ -323,6 +333,7 @@ All code in `main.rs` for:
 ### Background Caching
 
 Benefits:
+
 - Consistent /metrics response time
 - Decouples scan cost from scrape frequency
 - Allows longer scans without timeout issues
@@ -357,4 +368,4 @@ Benefits:
 
 ## 🔗 Project & Support
 
-Project: https://github.com/cansp-dev/herakles-node-exporter — More info: https://www.herakles.now — Support: exporter@herakles.now
+Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

@@ -66,9 +66,7 @@ pub async fn health_handler(State(state): State<SharedState>) -> impl IntoRespon
     (
         status,
         [("Content-Type", "text/plain; charset=utf-8")],
-        format!(
-            "{message}\n\nUptime: {uptime_str}\n\n{table}\n{buffer_section}\n{FOOTER_TEXT}"
-        ),
+        format!("{message}\n\nUptime: {uptime_str}\n\n{table}\n{buffer_section}\n{FOOTER_TEXT}"),
     )
 }
 

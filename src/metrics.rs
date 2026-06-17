@@ -31,21 +31,21 @@ pub struct MemoryMetrics {
     pub system_disk_read_bytes_total: CounterVec, // labels: device
     pub system_disk_write_bytes_total: CounterVec, // labels: device
     pub system_disk_io_time_seconds_total: CounterVec, // labels: device
-    pub system_disk_queue_depth: GaugeVec,      // labels: device
+    pub system_disk_queue_depth: GaugeVec,        // labels: device
     pub system_disk_psi_wait_seconds_total: Counter,
 
     // ========== Network System Metrics ==========
-    pub system_net_rx_bytes_total: CounterVec,  // labels: iface
-    pub system_net_tx_bytes_total: CounterVec,  // labels: iface
+    pub system_net_rx_bytes_total: CounterVec, // labels: iface
+    pub system_net_tx_bytes_total: CounterVec, // labels: iface
     pub system_net_rx_errors_total: CounterVec, // labels: iface
     pub system_net_tx_errors_total: CounterVec, // labels: iface
-    pub system_net_drops_total: CounterVec,     // labels: iface, direction
+    pub system_net_drops_total: CounterVec,    // labels: iface, direction
 
     // ========== Filesystem System Metrics ==========
-    pub system_filesystem_avail_bytes: GaugeVec,  // labels: device, mountpoint, fstype
-    pub system_filesystem_size_bytes: GaugeVec,   // labels: device, mountpoint, fstype
-    pub system_filesystem_files: GaugeVec,        // labels: device, mountpoint, fstype
-    pub system_filesystem_files_free: GaugeVec,   // labels: device, mountpoint, fstype
+    pub system_filesystem_avail_bytes: GaugeVec, // labels: device, mountpoint, fstype
+    pub system_filesystem_size_bytes: GaugeVec,  // labels: device, mountpoint, fstype
+    pub system_filesystem_files: GaugeVec,       // labels: device, mountpoint, fstype
+    pub system_filesystem_files_free: GaugeVec,  // labels: device, mountpoint, fstype
 
     // ========== TCP Connection Metrics (eBPF) ==========
     #[cfg_attr(not(feature = "ebpf"), allow(dead_code))] // Used when eBPF feature is enabled
@@ -635,15 +635,15 @@ impl MemoryMetrics {
     }
 
     /// Resets only group-level metrics (not system-level metrics).
-    /// 
+    ///
     /// This is more efficient than `reset()` because it only resets metrics that
     /// change frequently based on process aggregation. System-level metrics like
     /// disk stats, network stats, and hardware info are queried fresh on every
     /// scrape and don't need to be reset.
-    /// 
+    ///
     /// Use this method in the metrics handler to reduce unnecessary work and
     /// improve scrape performance.
-    /// 
+    ///
     /// Note: Counter metrics are never reset as they are monotonically increasing.
     pub fn reset_group_metrics(&self) {
         // CPU Group - only reset usage ratio (gauge), not cpu_seconds_total (counter)

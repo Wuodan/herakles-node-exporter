@@ -101,10 +101,7 @@ fn compile_ebpf_programs() {
         }
     }
 
-    fn prepare_vmlinux_header(
-        bpf_src: &std::path::Path,
-        output_path: &std::path::Path,
-    ) -> PathBuf {
+    fn prepare_vmlinux_header(bpf_src: &std::path::Path, output_path: &std::path::Path) -> PathBuf {
         let checked_in = bpf_src.join("vmlinux.h");
         let btf_path = "/sys/kernel/btf/vmlinux";
 
