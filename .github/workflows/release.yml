@@ -9,10 +9,15 @@ permissions:
   contents: write
 
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   build-and-release:
+    needs: lint
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install eBPF build dependencies
         run: |
@@ -34,12 +39,13 @@ jobs:
             sudo ln -sf "$BPFTOOL_PATH" /usr/local/bin/bpftool
           fi
 
-      - name: Setup Rust
+      - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Build with eBPF
         run: cargo build --release --features ebpf
