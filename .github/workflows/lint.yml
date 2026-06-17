@@ -84,7 +84,7 @@ jobs:
         with:
           dockerfile: Dockerfile
 
-      - name: Fail if any non-Rust lint failed
+      - name: Summarize non-Rust lint failures
         if: |
           always() &&
           (
@@ -95,5 +95,14 @@ jobs:
             steps.hadolint.outcome == 'failure'
           )
         run: |
-          echo "One or more non-Rust lint steps failed."
+          failed_steps=()
+          [[ "${{ steps.actionlint.outcome }}" == "failure" ]] && failed_steps+=("actionlint")
+          [[ "${{ steps.markdown.outcome }}" == "failure" ]] && failed_steps+=("markdownlint")
+          [[ "${{ steps.shellcheck.outcome }}" == "failure" ]] && failed_steps+=("shellcheck")
+          [[ "${{ steps.taplo.outcome }}" == "failure" ]] && failed_steps+=("taplo")
+          [[ "${{ steps.hadolint.outcome }}" == "failure" ]] && failed_steps+=("hadolint")
+          echo "Non-Rust lint failures:"
+          for step in "${failed_steps[@]}"; do
+            echo "- ${step}"
+          done
           exit 1
