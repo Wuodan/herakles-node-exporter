@@ -24,7 +24,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: rust-autofix-${{ github.ref }}
+  group: lint-autofix-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          LOG_FILE="${RUNNER_TEMP}/rust-autofix.log"
+          LOG_FILE="${RUNNER_TEMP}/lint-autofix.log"
           {
             cargo clippy --fix --allow-dirty --allow-staged --lib --bins --examples --no-default-features
             cargo fmt --all
@@ -165,7 +165,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           # Keep the branch name stable so repeated runs update the same autofix PR.
-          branch: rust-autofix/${{ github.ref_name }}
+          branch: lint-autofix/${{ github.ref_name }}
           delete-branch: true
           commit-message: "Apply lint autofixes"
           title: "Apply lint autofixes"
