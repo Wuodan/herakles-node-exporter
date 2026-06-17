@@ -99,6 +99,7 @@ jobs:
         if: always() && steps.changes.outputs.has_changes == 'true' && env.AUTOFIX_MODE == 'pull_request'
         uses: peter-evans/create-pull-request@v7
         with:
+          # Keep the branch name stable so repeated runs update the same autofix PR.
           branch: rust-autofix/${{ github.ref_name }}
           delete-branch: true
           commit-message: "Apply Rust autofixes"
