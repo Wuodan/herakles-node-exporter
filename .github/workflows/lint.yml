@@ -5,8 +5,6 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches-ignore:
-      - main
 
 permissions:
   contents: read
@@ -96,11 +94,11 @@ jobs:
           )
         run: |
           failed_steps=()
-          [[ "${{ steps.actionlint.outcome }}" == "failure" ]] && failed_steps+=("actionlint")
-          [[ "${{ steps.markdown.outcome }}" == "failure" ]] && failed_steps+=("markdownlint")
-          [[ "${{ steps.shellcheck.outcome }}" == "failure" ]] && failed_steps+=("shellcheck")
-          [[ "${{ steps.taplo.outcome }}" == "failure" ]] && failed_steps+=("taplo")
-          [[ "${{ steps.hadolint.outcome }}" == "failure" ]] && failed_steps+=("hadolint")
+          [[ "${{ steps.actionlint.outcome }}" == "failure" ]] && failed_steps+=("Lint GitHub Actions workflows")
+          [[ "${{ steps.markdown.outcome }}" == "failure" ]] && failed_steps+=("Lint Markdown")
+          [[ "${{ steps.shellcheck.outcome }}" == "failure" ]] && failed_steps+=("Lint shell scripts")
+          [[ "${{ steps.taplo.outcome }}" == "failure" ]] && failed_steps+=("Check TOML formatting")
+          [[ "${{ steps.hadolint.outcome }}" == "failure" ]] && failed_steps+=("Lint Dockerfile")
           echo "Non-Rust lint failures:"
           for step in "${failed_steps[@]}"; do
             echo "- ${step}"
