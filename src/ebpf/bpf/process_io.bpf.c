@@ -1,8 +1,66 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
-#include "vmlinux.h"
+#include <stdbool.h>
+
+typedef unsigned char __u8;
+typedef unsigned short __u16;
+typedef unsigned int __u32;
+typedef unsigned long long __u64;
+typedef signed char __s8;
+typedef signed short __s16;
+typedef signed int __s32;
+typedef signed long long __s64;
+typedef __u16 __be16;
+typedef __u32 __be32;
+typedef __u32 __wsum;
+
+typedef __u8 u8;
+typedef __u16 u16;
+typedef __u32 u32;
+typedef __u64 u64;
+
+#define BPF_MAP_TYPE_HASH 1
+#define BPF_MAP_TYPE_ARRAY 2
+#define BPF_ANY 0
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
-#include <bpf/bpf_core_read.h>
+
+// Minimal tracepoint context definitions to keep builds independent from host kernel BTF.
+struct trace_entry {
+    unsigned short type;
+    unsigned char flags;
+    unsigned char preempt_count;
+    int pid;
+};
+
+struct trace_event_raw_sys_enter {
+    struct trace_entry ent;
+    long id;
+    unsigned long args[6];
+    char __data[0];
+};
+
+struct trace_event_raw_sys_exit {
+    struct trace_entry ent;
+    long id;
+    long ret;
+    char __data[0];
+};
+
+struct trace_event_raw_inet_sock_set_state {
+    struct trace_entry ent;
+    const void *skaddr;
+    int oldstate;
+    int newstate;
+    u16 sport;
+    u16 dport;
+    u16 family;
+    u16 protocol;
+    u8 saddr[4];
+    u8 daddr[4];
+    u8 saddr_v6[16];
+    u8 daddr_v6[16];
+    char __data[0];
+};
 
 // Maximum number of processes to track
 #define MAX_ENTRIES 10240
@@ -330,9 +388,8 @@ int trace_send_exit(struct trace_event_raw_sys_exit *ctx) {
 }
 
 // ========== SYSCALL TRACEPOINT HOOKS FOR BLOCK I/O ==========
-// Note: struct trace_event_raw_sys_enter and trace_event_raw_sys_exit are defined
-// in vmlinux.h and represent the kernel tracepoint contexts for syscall entry/exit.
-// They provide access to syscall arguments via ctx->args[] and return value via ctx->ret.
+// The syscall tracepoint contexts above provide access to syscall arguments via
+// ctx->args[] and return values via ctx->ret without depending on vmlinux.h.
 
 // Helper to update blkio stats for a PID
 // Updates the blkio_stats_map with read or write I/O statistics for a given process.
