@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+#include <stdbool.h>
+#include <linux/bpf.h>
+#include <linux/types.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+
+typedef __u8 u8;
+typedef __u16 u16;
+typedef __u32 u32;
+typedef __u64 u64;
 
 // Minimal tracepoint context definitions to keep builds independent from host kernel BTF.
 struct trace_entry {
