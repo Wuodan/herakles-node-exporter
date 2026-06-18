@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  build-and-release:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,8 +23,19 @@ jobs:
 
       - name: Install bpftool
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y bpftool
+          sudo apt-get install -y \
+            linux-tools-common \
+            linux-tools-generic
+          # Ensure bpftool is available
+          if ! which bpftool; then
+            BPFTOOL_PATH="$(find /usr/lib/linux-tools -type f -name bpftool | head -1)"
+            test -n "$BPFTOOL_PATH" || { echo "bpftool not found"; exit 1; }
+            sudo ln -sf "$BPFTOOL_PATH" /usr/local/bin/bpftool
+          fi
+          command -v bpftool
+          bpftool version
 
       - name: Build with eBPF
         run: cargo build --release --features ebpf
