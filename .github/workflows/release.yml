@@ -28,6 +28,7 @@ jobs:
             libbpf-dev \
             pkg-config \
             libelf-dev \
+            linux-libc-dev \
             zlib1g-dev
 
       - name: Setup Rust toolchain
