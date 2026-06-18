@@ -14,7 +14,6 @@ inputs:
 runs:
   using: composite
   steps:
-
     - name: Install Prometheus for promtool
       shell: bash
       run: |
@@ -25,40 +24,39 @@ runs:
 
     - name: Capture metrics output
       shell: bash
-      outputs:
-
       run: |
         set -euo pipefail
         # create unique temp dir for log file
-        temp_dir="$(mktemp)"
-        log_file="${temp_dir}}/herakles-node-exporter.log"
+        temp_dir="$(mktemp -d)"
+        log_file="${temp_dir}/herakles-node-exporter.log"
+        metrics_file="${temp_dir}/herakles.metrics"
 
         # run binary and write output to log file
-        "${{ inputs.binary-path }}" > ${log_file} 2>&1 &
-        # capture process id to kill it later
+        "${{ inputs.binary-path }}" > "${log_file}" 2>&1 &
         EXPORTER_PID=$!
         trap 'kill "$EXPORTER_PID" 2>/dev/null || true; wait "$EXPORTER_PID" 2>/dev/null || true' EXIT
 
         # wait for port to be ready
         for _ in $(seq 1 30); do
-          if curl -fsS "http://127.0.0.1:${{ inputs.port }}/metrics" > ${temp_dir}/herakles.metrics; then
+          if curl -fsS "http://127.0.0.1:${{ inputs.port }}/metrics" > "${metrics_file}"; then
             break
           fi
           sleep 1
         done
         # validate port became ready
-        test -s ${temp_dir}/herakles.metrics || {
+        test -s "${metrics_file}" || {
           echo "metrics endpoint did not become ready on port ${{ inputs.port }}"
-          tail -n 40 ${temp_dir}/herakles-node-exporter.log || true
+          tail -n 40 "${log_file}" || true
           exit 1
         }
-        # cleanup port verification artifacts and kill process
-        rm ${temp_dir}/herakles.metrics
+        # cleanup: kill process
         kill "$EXPORTER_PID"
-        
-        # Write log file path to job env vars for later steps
+        wait "$EXPORTER_PID" 2>/dev/null || true
+        trap - EXIT
+
         echo "HERAKLES_NODE_EXPORTER_LOG_FILE=${log_file}" >> "$GITHUB_ENV"
+        echo "HERAKLES_NODE_EXPORTER_METRICS_FILE=${metrics_file}" >> "$GITHUB_ENV"
 
     - name: Validate metrics output
       shell: bash
-      run: promtool check metrics < "${HERAKLES_NODE_EXPORTER_LOG_FILE}"
+      run: promtool check metrics < "${HERAKLES_NODE_EXPORTER_METRICS_FILE}"
