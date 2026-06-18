@@ -46,7 +46,7 @@ sled = "0.34"
 libc = "0.2"
 
 # Random number generation for testdata
-rand = "0.9"
+rand = "0.10"
 
 # DateTime handling for testdata timestamp
 chrono = { version = "0.4", features = ["serde"] }
