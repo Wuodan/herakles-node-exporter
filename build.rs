@@ -79,15 +79,7 @@ fn compile_ebpf_programs() {
         panic!("eBPF compilation failed. See output above for details.");
     }
 
-    // Copy the compiled eBPF object to src tree for embedding with include_bytes!()
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let embedded_obj = manifest_dir.join("src/ebpf/bpf/process_io.bpf.o");
-    std::fs::copy(&bpf_obj, &embedded_obj).expect("Failed to copy eBPF object to src tree");
-
-    println!(
-        "cargo:warning=✅ eBPF object embedded at: {}",
-        embedded_obj.display()
-    );
+    println!("cargo:warning=✅ eBPF object built at: {}", bpf_obj.display());
 
     fn check_tool(tool: &str, arg: &str) {
         let output = Command::new(tool).arg(arg).output();
