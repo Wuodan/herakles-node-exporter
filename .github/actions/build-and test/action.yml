@@ -1,5 +1,5 @@
-name: Build eBPF Binary
-description: Set up Rust, install eBPF build dependencies, and build the release binary with eBPF support.
+name: Build and Test eBPF Binary
+description: Set up toolchain with dependencies, run tests, build the binary with eBPF support and test the binary.
 
 inputs:
   rust-target:
@@ -27,6 +27,13 @@ runs:
           clang \
           libelf-dev
 
+    - name: Run tests
+      shell: bash
+      run: cargo test
+
     - name: Build with eBPF
       shell: bash
-      run: cargo build --release --features ebpf
+      run: cargo build --release --features ebpf --target-dir "${{ inputs.binary-dir }}"
+
+    - name: Run binary and validate its Prometheus metrics format
+      uses: ./.github/actions/validate-prometheus-metrics
