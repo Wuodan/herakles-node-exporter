@@ -70,10 +70,7 @@ fn compile_ebpf_programs() {
         panic!("eBPF compilation failed. See output above for details.");
     }
 
-    println!(
-        "cargo:info=✅ eBPF object built at: {}",
-        bpf_obj.display()
-    );
+    println!("cargo:info=✅ eBPF object built at: {}", bpf_obj.display());
 
     fn check_tool(tool: &str, arg: &str) {
         let output = Command::new(tool).arg(arg).output();
