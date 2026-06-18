@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 #include <stdbool.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
 
 typedef unsigned char __u8;
 typedef unsigned short __u16;
 typedef unsigned int __u32;
 typedef unsigned long long __u64;
+typedef signed char __s8;
+typedef signed short __s16;
+typedef signed int __s32;
+typedef signed long long __s64;
+typedef __u16 __be16;
+typedef __u32 __be32;
+typedef __u32 __wsum;
 
 typedef __u8 u8;
 typedef __u16 u16;
@@ -15,6 +20,10 @@ typedef __u64 u64;
 
 #define BPF_MAP_TYPE_HASH 1
 #define BPF_MAP_TYPE_ARRAY 2
+#define BPF_ANY 0
+
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 
 // Minimal tracepoint context definitions to keep builds independent from host kernel BTF.
 struct trace_entry {
