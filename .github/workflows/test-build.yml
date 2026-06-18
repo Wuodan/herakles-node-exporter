@@ -15,6 +15,12 @@ on:
       release-binary-sha256-x86_64-linux-musl:
         description: SHA-256 of the tested musl release binary.
         value: ${{ jobs.build-and-test.outputs.release-binary-sha256-x86_64-linux-musl }}
+      release-binary-sha256-aarch64-linux-gnu:
+        description: SHA-256 of the tested ARM64 glibc release binary.
+        value: ${{ jobs.build-and-test.outputs.release-binary-sha256-aarch64-linux-gnu }}
+      release-binary-sha256-aarch64-linux-musl:
+        description: SHA-256 of the tested ARM64 musl release binary.
+        value: ${{ jobs.build-and-test.outputs.release-binary-sha256-aarch64-linux-musl }}
   workflow_dispatch:
     inputs:
       upload-release-binary:
@@ -47,12 +53,22 @@ jobs:
         include:
           - rust-target: x86_64-unknown-linux-gnu
             artifact-suffix: x86_64-linux-gnu
+            runner: ubuntu-latest
           - rust-target: x86_64-unknown-linux-musl
             artifact-suffix: x86_64-linux-musl
-    runs-on: ubuntu-latest
+            runner: ubuntu-latest
+          - rust-target: aarch64-unknown-linux-gnu
+            artifact-suffix: aarch64-linux-gnu
+            runner: ubuntu-24.04-arm
+          - rust-target: aarch64-unknown-linux-musl
+            artifact-suffix: aarch64-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     outputs:
       release-binary-sha256-x86_64-linux-gnu: ${{ steps.out-sha-x86_64-linux-gnu.outputs.sha256 }}
       release-binary-sha256-x86_64-linux-musl: ${{ steps.out-sha-x86_64-linux-musl.outputs.sha256 }}
+      release-binary-sha256-aarch64-linux-gnu: ${{ steps.out-sha-aarch64-linux-gnu.outputs.sha256 }}
+      release-binary-sha256-aarch64-linux-musl: ${{ steps.out-sha-aarch64-linux-musl.outputs.sha256 }}
     permissions:
       contents: read
       attestations: write
@@ -84,6 +100,16 @@ jobs:
       - name: Export release binary SHA (musl)
         id: out-sha-x86_64-linux-musl
         if: ${{ inputs.upload-release-binary && matrix.artifact-suffix == 'x86_64-linux-musl' }}
+        run: echo "sha256=$(awk '{print $1}' dist/herakles-node-exporter.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Export release binary SHA (arm64 glibc)
+        id: out-sha-aarch64-linux-gnu
+        if: ${{ inputs.upload-release-binary && matrix.artifact-suffix == 'aarch64-linux-gnu' }}
+        run: echo "sha256=$(awk '{print $1}' dist/herakles-node-exporter.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Export release binary SHA (arm64 musl)
+        id: out-sha-aarch64-linux-musl
+        if: ${{ inputs.upload-release-binary && matrix.artifact-suffix == 'aarch64-linux-musl' }}
         run: echo "sha256=$(awk '{print $1}' dist/herakles-node-exporter.sha256)" >> "$GITHUB_OUTPUT"
 
       - name: Generate build provenance attestation
