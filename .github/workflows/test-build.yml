@@ -21,21 +21,13 @@ jobs:
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Install bpftool
+      - name: Install eBPF build dependencies
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
             clang \
-            libelf-dev \
-            linux-tools-common \
-            linux-tools-generic
-          # Ensure bpftool is available
-          if ! which bpftool; then
-            BPFTOOL_PATH="$(find /usr/lib/linux-tools -type f -name bpftool | head -1)"
-            test -n "$BPFTOOL_PATH" || { echo "bpftool not found"; exit 1; }
-            sudo ln -sf "$BPFTOOL_PATH" /usr/local/bin/bpftool
-          fi
+            libelf-dev
 
       - name: Build with eBPF
         run: cargo build --release --features ebpf
