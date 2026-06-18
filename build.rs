@@ -25,14 +25,42 @@ fn compile_ebpf_programs() {
 
     // Check for required tools
     check_tool("clang", "--version");
+    check_tool("bpftool", "version");
 
     println!("cargo:rerun-if-changed=src/ebpf/bpf/process_io.bpf.c");
-    println!("cargo:rerun-if-changed=src/ebpf/bpf/vmlinux.h");
+
+    // Generate vmlinux.h if needed
+    let vmlinux_h = bpf_src.join("vmlinux.h");
+    if !vmlinux_h.exists() {
+        eprintln!("  ℹ️  Generating vmlinux.h from kernel BTF...");
+        let output = Command::new("bpftool")
+            .args([
+                "btf",
+                "dump",
+                "file",
+                "/sys/kernel/btf/vmlinux",
+                "format",
+                "c",
+            ])
+            .current_dir(&bpf_src)
+            .output()
+            .expect("Failed to generate vmlinux.h");
+
+        if !output.status.success() {
+            panic!("Failed to generate vmlinux.h. BTF support required.");
+        }
+
+        // Validate that the output looks like a C header
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        if !output_str.contains("#ifndef") || !output_str.contains("struct") {
+            panic!("Generated vmlinux.h does not appear to be a valid C header");
+        }
+
+        std::fs::write(&vmlinux_h, output.stdout).expect("Failed to write vmlinux.h");
+    }
 
     // Find libbpf headers from libbpf-sys
     let libbpf_include = find_libbpf_include_dir();
-    let generated_vmlinux_h = out_dir.join("vmlinux.h");
-    let vmlinux_include_dir = prepare_vmlinux_header(&bpf_src, &generated_vmlinux_h);
 
     // Compile eBPF program with better error output
     let bpf_obj = out_dir.join("process_io.bpf.o");
@@ -45,8 +73,6 @@ fn compile_ebpf_programs() {
         "bpf".to_string(),
         "-D__TARGET_ARCH_x86".to_string(),
         "-D__BPF_TRACING__".to_string(), // Important for BPF_CORE_READ macros
-        "-I".to_string(),
-        vmlinux_include_dir.to_str().unwrap().to_string(),
         "-I".to_string(),
         bpf_src.to_str().unwrap().to_string(),
     ];
@@ -80,17 +106,14 @@ fn compile_ebpf_programs() {
     let embedded_obj = manifest_dir.join("src/ebpf/bpf/process_io.bpf.o");
     std::fs::copy(&bpf_obj, &embedded_obj).expect("Failed to copy eBPF object to src tree");
 
-    println!(
-        "cargo:warning=✅ eBPF object embedded at: {}",
-        embedded_obj.display()
-    );
+    eprintln!("  ✅ eBPF object embedded at: {}", embedded_obj.display());
 
     fn check_tool(tool: &str, arg: &str) {
         let output = Command::new(tool).arg(arg).output();
 
         match output {
             Ok(out) if out.status.success() => {
-                println!("cargo:warning=Found {}: OK", tool);
+                eprintln!("  ✅ Found {}: OK", tool);
             }
             _ => {
                 panic!(
@@ -99,74 +122,6 @@ fn compile_ebpf_programs() {
                 );
             }
         }
-    }
-
-    fn prepare_vmlinux_header(
-        bpf_src: &std::path::Path,
-        output_path: &std::path::Path,
-    ) -> PathBuf {
-        let checked_in = bpf_src.join("vmlinux.h");
-        let btf_path = "/sys/kernel/btf/vmlinux";
-
-        let header_contents = if std::path::Path::new(btf_path).exists() {
-            match Command::new("bpftool")
-                .args(["btf", "dump", "file", btf_path, "format", "c"])
-                .output()
-            {
-                Ok(output) if output.status.success() => {
-                    println!(
-                        "cargo:warning=Using freshly generated vmlinux.h at: {}",
-                        output_path.display()
-                    );
-                    String::from_utf8(output.stdout)
-                        .expect("Generated vmlinux.h is not valid UTF-8")
-                }
-                Ok(_) => panic!("Failed to generate vmlinux.h from kernel BTF."),
-                Err(err) => {
-                    println!(
-                        "cargo:warning=bpftool unavailable ({}). Using checked-in vmlinux.h",
-                        err
-                    );
-                    std::fs::read_to_string(&checked_in)
-                        .expect("Checked-in vmlinux.h is missing or unreadable")
-                }
-            }
-        } else {
-            println!(
-                "cargo:warning=Kernel BTF not found at {}. Using checked-in vmlinux.h",
-                btf_path
-            );
-            std::fs::read_to_string(&checked_in)
-                .expect("Checked-in vmlinux.h is missing or unreadable")
-        };
-
-        let sanitized = sanitize_vmlinux_header(&header_contents);
-        std::fs::write(output_path, sanitized).expect("Failed to write prepared vmlinux.h");
-        output_path
-            .parent()
-            .expect("Prepared vmlinux.h has no parent directory")
-            .to_path_buf()
-    }
-
-    fn sanitize_vmlinux_header(contents: &str) -> String {
-        let mut sanitized = String::with_capacity(contents.len());
-        for line in contents.lines() {
-            if line.starts_with(
-                "extern int bpf_stream_vprintk(int stream_id, const char *fmt__str, const void *args, u32 len__sz) __weak __ksym;"
-            ) {
-                println!(
-                    "cargo:warning=Stripping incompatible bpf_stream_vprintk declaration from vmlinux.h"
-                );
-                sanitized.push_str("/* stripped incompatible bpf_stream_vprintk declaration */\n");
-                continue;
-            }
-            sanitized.push_str(line);
-            sanitized.push('\n');
-        }
-        if !sanitized.contains("#ifndef") || !sanitized.contains("struct") {
-            panic!("Generated vmlinux.h does not appear to be a valid C header");
-        }
-        sanitized
     }
 
     fn find_libbpf_include_dir() -> Option<String> {
@@ -178,7 +133,7 @@ fn compile_ebpf_programs() {
         // Navigate up to target/release/build or target/debug/build
         if let Some(build_dir) = out_path
             .ancestors()
-            .find(|p| p.file_name().map_or(false, |n| n == "build"))
+            .find(|p| p.file_name().is_some_and(|n| n == "build"))
         {
             // Find libbpf-sys-* directory
             if let Ok(entries) = std::fs::read_dir(build_dir) {
@@ -192,10 +147,7 @@ fn compile_ebpf_programs() {
                     {
                         let include_dir = path.join("out").join("include");
                         if include_dir.exists() {
-                            println!(
-                                "cargo:warning=Found libbpf headers at: {}",
-                                include_dir.display()
-                            );
+                            eprintln!("  ✅ Found libbpf headers at: {}", include_dir.display());
                             return Some(include_dir.to_string_lossy().to_string());
                         }
                     }
@@ -207,7 +159,7 @@ fn compile_ebpf_programs() {
         for path in &["/usr/include", "/usr/local/include"] {
             let bpf_helpers = PathBuf::from(path).join("bpf/bpf_helpers.h");
             if bpf_helpers.exists() {
-                println!("cargo:warning=Using system libbpf headers at: {}", path);
+                eprintln!("  ℹ️  Using system libbpf headers at: {}", path);
                 return Some(path.to_string());
             }
         }

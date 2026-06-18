@@ -6,8 +6,6 @@
 //! - `test`: Metrics collection testing
 //! - `subgroups`: Subgroup listing
 //! - `generate`: Test data generation
-//! - `install`: System-wide installation
-//! - `uninstall`: System-wide uninstallation
 
 pub mod check;
 pub mod config;
