@@ -53,4 +53,4 @@ jobs:
             exit 1
           }
 
-          promtool check metrics /tmp/herakles.metrics
+          promtool check metrics < /tmp/herakles.metrics
