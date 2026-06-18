@@ -142,7 +142,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
     // Done with cache - release the read lock
     drop(cache_guard);
 
-    state.processes_total.set(exported_count as f64);
+    state.processes.set(exported_count as f64);
 
     // ========== PHASE 2: Export Group-Level Metrics ==========
     for ((group, subgroup), metrics) in group_aggregations {
@@ -555,7 +555,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
     // Entropy
     match system::read_entropy() {
         Ok(entropy) => {
-            state.metrics.system_entropy_bits.set(entropy as f64);
+            state.metrics.system_entropy_bytes.set(entropy as f64 / 8.0);
         }
         Err(e) => warn!("Failed to read entropy: {}", e),
     }
@@ -664,7 +664,10 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
             state.metrics.ebpf_events_dropped_total.inc_by(perf_stats.lost_events_total as f64);
             
             // Number of loaded eBPF programs (gauge - keep as-is)
-            state.metrics.ebpf_maps_count.set(perf_stats.programs_loaded as f64);
+            state
+                .metrics
+                .ebpf_programs_loaded
+                .set(perf_stats.programs_loaded as f64);
             
             // CPU seconds - now properly tracking actual CPU time spent
             state.metrics.ebpf_cpu_seconds_total.reset();

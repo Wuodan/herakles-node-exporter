@@ -27,7 +27,7 @@ pub struct AppState {
     pub registry: Registry,
     pub metrics: MemoryMetrics,
     pub scrape_duration: Gauge,
-    pub processes_total: Gauge,
+    pub processes: Gauge,
     pub cache_update_duration: Gauge,
     pub cache_update_success: Gauge,
     pub cache_updating: Gauge,

@@ -81,7 +81,7 @@ pub struct MemoryMetrics {
     pub system_context_switches_total: Counter,
     pub system_forks_total: Counter,
     pub system_open_fds: GaugeVec, // labels: state (allocated/max)
-    pub system_entropy_bits: Gauge,
+    pub system_entropy_bytes: Gauge,
 
     // ========== CPU Group Metrics ==========
     pub group_cpu_usage_ratio: GaugeVec, // labels: group, subgroup
@@ -106,7 +106,7 @@ pub struct MemoryMetrics {
     // ========== eBPF Performance Metrics ==========
     pub ebpf_events_processed_total: Counter,
     pub ebpf_events_dropped_total: Counter,
-    pub ebpf_maps_count: Gauge,
+    pub ebpf_programs_loaded: Gauge,
     pub ebpf_cpu_seconds_total: Counter,
 }
 
@@ -362,8 +362,10 @@ impl MemoryMetrics {
             ),
             &["state"],
         )?;
-        let system_entropy_bits =
-            Gauge::new("herakles_system_entropy_bits", "Available entropy in bits")?;
+        let system_entropy_bytes = Gauge::new(
+            "herakles_system_entropy_bytes",
+            "Available entropy in bytes",
+        )?;
 
         // ========== CPU Group Metrics ==========
         let group_cpu_usage_ratio = GaugeVec::new(
@@ -466,8 +468,8 @@ impl MemoryMetrics {
             "herakles_ebpf_events_dropped_total",
             "Total number of eBPF events dropped",
         )?;
-        let ebpf_maps_count = Gauge::new(
-            "herakles_ebpf_maps_count",
+        let ebpf_programs_loaded = Gauge::new(
+            "herakles_ebpf_programs_loaded",
             "Number of eBPF programs currently loaded",
         )?;
         let ebpf_cpu_seconds_total = Counter::new(
@@ -538,7 +540,7 @@ impl MemoryMetrics {
         registry.register(Box::new(system_context_switches_total.clone()))?;
         registry.register(Box::new(system_forks_total.clone()))?;
         registry.register(Box::new(system_open_fds.clone()))?;
-        registry.register(Box::new(system_entropy_bits.clone()))?;
+        registry.register(Box::new(system_entropy_bytes.clone()))?;
 
         // CPU Group
         registry.register(Box::new(group_cpu_usage_ratio.clone()))?;
@@ -563,7 +565,7 @@ impl MemoryMetrics {
         // eBPF Performance Metrics
         registry.register(Box::new(ebpf_events_processed_total.clone()))?;
         registry.register(Box::new(ebpf_events_dropped_total.clone()))?;
-        registry.register(Box::new(ebpf_maps_count.clone()))?;
+        registry.register(Box::new(ebpf_programs_loaded.clone()))?;
         registry.register(Box::new(ebpf_cpu_seconds_total.clone()))?;
 
         Ok(Self {
@@ -614,7 +616,7 @@ impl MemoryMetrics {
             system_context_switches_total,
             system_forks_total,
             system_open_fds,
-            system_entropy_bits,
+            system_entropy_bytes,
             group_cpu_usage_ratio,
             group_cpu_seconds_total,
             group_memory_rss_bytes,
@@ -629,7 +631,7 @@ impl MemoryMetrics {
             group_net_connections_total,
             ebpf_events_processed_total,
             ebpf_events_dropped_total,
-            ebpf_maps_count,
+            ebpf_programs_loaded,
             ebpf_cpu_seconds_total,
         })
     }
