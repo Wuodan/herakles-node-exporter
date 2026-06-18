@@ -1,10 +1,14 @@
 name: Test Build
 
 on:
+  workflow_call:
   workflow_dispatch:
-
-permissions:
-  contents: read
+  pull_request:
+    branches-ignore:
+      - lint-autofix/**
+  push:
+    branches-ignore:
+      - lint-autofix/**
 
 jobs:
   build-and-test:
@@ -13,8 +17,5 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build eBPF binary
-        uses: ./.github/actions/build-ebpf-binary
-
-      - name: Validate Prometheus metrics format
-        uses: ./.github/actions/validate-prometheus-metrics
+      - name: Build and Test eBPF Binary
+        uses: ./.github/actions/build-and test
