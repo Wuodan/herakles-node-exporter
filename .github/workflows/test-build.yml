@@ -27,7 +27,30 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             clang \
-            libelf-dev
+            libelf-dev \
+            prometheus
 
       - name: Build with eBPF
         run: cargo build --release --features ebpf
+
+      - name: Validate Prometheus metrics format
+        run: |
+          set -euo pipefail
+          ./target/release/herakles-node-exporter > /tmp/herakles-node-exporter.log 2>&1 &
+          EXPORTER_PID=$!
+          trap 'kill "$EXPORTER_PID" 2>/dev/null || true; wait "$EXPORTER_PID" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9215/metrics > /tmp/herakles.metrics; then
+              break
+            fi
+            sleep 1
+          done
+
+          test -s /tmp/herakles.metrics || {
+            echo "metrics endpoint did not become ready"
+            tail -n 40 /tmp/herakles-node-exporter.log || true
+            exit 1
+          }
+
+          promtool check metrics /tmp/herakles.metrics
