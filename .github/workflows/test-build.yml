@@ -32,6 +32,10 @@ jobs:
   build-and-test:
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,6 +50,12 @@ jobs:
           mkdir -p dist
           cp target/release/herakles-node-exporter dist/herakles-node-exporter
           sha256sum dist/herakles-node-exporter > dist/herakles-node-exporter.sha256
+
+      - name: Generate build provenance attestation
+        if: ${{ inputs.upload-release-binary }}
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/herakles-node-exporter
 
       - name: Upload tested release binary
         if: ${{ inputs.upload-release-binary }}
