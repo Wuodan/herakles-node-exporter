@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 #include <stdbool.h>
-#include <linux/bpf.h>
-#include <linux/types.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+
+typedef unsigned char __u8;
+typedef unsigned short __u16;
+typedef unsigned int __u32;
+typedef unsigned long long __u64;
 
 typedef __u8 u8;
 typedef __u16 u16;
 typedef __u32 u32;
 typedef __u64 u64;
+
+#define BPF_MAP_TYPE_HASH 1
+#define BPF_MAP_TYPE_ARRAY 2
 
 // Minimal tracepoint context definitions to keep builds independent from host kernel BTF.
 struct trace_entry {
@@ -37,14 +43,14 @@ struct trace_event_raw_inet_sock_set_state {
     const void *skaddr;
     int oldstate;
     int newstate;
-    __u16 sport;
-    __u16 dport;
-    __u16 family;
-    __u16 protocol;
-    __u8 saddr[4];
-    __u8 daddr[4];
-    __u8 saddr_v6[16];
-    __u8 daddr_v6[16];
+    u16 sport;
+    u16 dport;
+    u16 family;
+    u16 protocol;
+    u8 saddr[4];
+    u8 daddr[4];
+    u8 saddr_v6[16];
+    u8 daddr_v6[16];
     char __data[0];
 };
 

@@ -30,7 +30,6 @@ fn compile_ebpf_programs() {
 
     // Find libbpf headers from libbpf-sys
     let libbpf_include = find_libbpf_include_dir();
-    let linux_uapi_include = find_linux_uapi_include_dir();
 
     // Compile eBPF program with better error output
     let bpf_obj = out_dir.join("process_io.bpf.o");
@@ -52,15 +51,6 @@ fn compile_ebpf_programs() {
         clang_args.push("-I".to_string());
         clang_args.push(libbpf_path);
     }
-    if let Some(linux_uapi_path) = linux_uapi_include {
-        println!(
-            "cargo:warning=Using Linux UAPI headers at: {}",
-            linux_uapi_path
-        );
-        clang_args.push("-I".to_string());
-        clang_args.push(linux_uapi_path);
-    }
-
     clang_args.push("-c".to_string());
     clang_args.push(bpf_c_file.to_str().unwrap().to_string());
     clang_args.push("-o".to_string());
@@ -141,37 +131,6 @@ fn compile_ebpf_programs() {
         }
 
         println!("cargo:warning=Could not find libbpf headers, compilation may fail");
-        None
-    }
-
-    fn find_linux_uapi_include_dir() -> Option<String> {
-        let mut candidates = vec![
-            "/usr/include/x86_64-linux-gnu".to_string(),
-            "/usr/include/aarch64-linux-gnu".to_string(),
-            "/usr/include/arm-linux-gnueabihf".to_string(),
-            "/usr/include/riscv64-linux-gnu".to_string(),
-        ];
-
-        for compiler in ["cc", "gcc", "clang"] {
-            if let Ok(output) = Command::new(compiler).arg("-dumpmachine").output() {
-                if output.status.success() {
-                    let triple = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !triple.is_empty() {
-                        candidates.push(format!("/usr/include/{triple}"));
-                    }
-                }
-            }
-        }
-
-        candidates.sort();
-        candidates.dedup();
-
-        for path in candidates {
-            if PathBuf::from(&path).join("asm/types.h").exists() {
-                return Some(path);
-            }
-        }
-
         None
     }
 }
