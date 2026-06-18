@@ -1,0 +1,79 @@
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      upload-release-binary:
+        description: Upload the tested release binary as a workflow artifact.
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      release-binary-sha256:
+        description: SHA-256 of the tested release binary.
+        value: ${{ jobs.build-and-test.outputs.release-binary-sha256 }}
+  workflow_dispatch:
+    inputs:
+      upload-release-binary:
+        description: Upload the tested release binary as a workflow artifact.
+        required: false
+        type: boolean
+        default: false
+  pull_request:
+    branches-ignore:
+      - lint-autofix/**
+  push:
+    branches-ignore:
+      - lint-autofix/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    outputs:
+      release-binary-sha256: ${{ steps.prepare-release-artifact-bundle.outputs.binary_sha256 }}
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and Test eBPF Binary
+        uses: ./.github/actions/build-and-test
+
+      - name: Prepare release artifact bundle
+        id: prepare-release-artifact-bundle
+        if: ${{ inputs.upload-release-binary }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp target/release/herakles-node-exporter dist/herakles-node-exporter
+          sha256sum dist/herakles-node-exporter > dist/herakles-node-exporter.sha256
+          echo "binary_sha256=$(sha256sum dist/herakles-node-exporter | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Generate build provenance attestation
+        if: ${{ inputs.upload-release-binary }}
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/herakles-node-exporter
+
+      - name: Upload tested release binary
+        if: ${{ inputs.upload-release-binary }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: herakles-node-exporter-release-binary
+          path: |
+            dist/herakles-node-exporter
+            dist/herakles-node-exporter.sha256
+          if-no-files-found: error
