@@ -10,8 +10,15 @@ on:
     branches-ignore:
       - lint-autofix/**
 
+permissions:
+  contents: read
+
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   build-and-test:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

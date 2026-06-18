@@ -33,7 +33,7 @@ runs:
 
     - name: Build with eBPF
       shell: bash
-      run: cargo build --release --features ebpf --target-dir "${{ inputs.binary-dir }}"
+      run: cargo build --release --features ebpf
 
     - name: Run binary and validate its Prometheus metrics format
       uses: ./.github/actions/validate-prometheus-metrics
