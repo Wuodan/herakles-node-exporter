@@ -8,6 +8,13 @@ on:
         required: false
         type: boolean
         default: false
+    outputs:
+      release-binary-sha256-x86_64-linux-gnu:
+        description: SHA-256 of the tested glibc release binary.
+        value: ${{ jobs.build-and-test.outputs.release-binary-sha256-x86_64-linux-gnu }}
+      release-binary-sha256-x86_64-linux-musl:
+        description: SHA-256 of the tested musl release binary.
+        value: ${{ jobs.build-and-test.outputs.release-binary-sha256-x86_64-linux-musl }}
   workflow_dispatch:
     inputs:
       upload-release-binary:
@@ -43,6 +50,9 @@ jobs:
           - rust-target: x86_64-unknown-linux-musl
             artifact-suffix: x86_64-linux-musl
     runs-on: ubuntu-latest
+    outputs:
+      release-binary-sha256-x86_64-linux-gnu: ${{ steps.out-sha-x86_64-linux-gnu.outputs.sha256 }}
+      release-binary-sha256-x86_64-linux-musl: ${{ steps.out-sha-x86_64-linux-musl.outputs.sha256 }}
     permissions:
       contents: read
       attestations: write
@@ -65,6 +75,16 @@ jobs:
           mkdir -p dist
           cp target/${{ matrix.rust-target }}/release/herakles-node-exporter dist/herakles-node-exporter
           sha256sum dist/herakles-node-exporter > dist/herakles-node-exporter.sha256
+
+      - name: Export release binary SHA (glibc)
+        id: out-sha-x86_64-linux-gnu
+        if: ${{ inputs.upload-release-binary && matrix.artifact-suffix == 'x86_64-linux-gnu' }}
+        run: echo "sha256=$(awk '{print $1}' dist/herakles-node-exporter.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Export release binary SHA (musl)
+        id: out-sha-x86_64-linux-musl
+        if: ${{ inputs.upload-release-binary && matrix.artifact-suffix == 'x86_64-linux-musl' }}
+        run: echo "sha256=$(awk '{print $1}' dist/herakles-node-exporter.sha256)" >> "$GITHUB_OUTPUT"
 
       - name: Generate build provenance attestation
         if: ${{ inputs.upload-release-binary }}

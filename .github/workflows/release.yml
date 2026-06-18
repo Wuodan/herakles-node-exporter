@@ -31,7 +31,7 @@ jobs:
           artifact-name: herakles-node-exporter-release-binary-x86_64-linux-gnu
           target-dir: dist/x86_64-linux-gnu
           file-path: herakles-node-exporter
-          expected-sha256: ""
+          expected-sha256: ${{ needs.ci.outputs.release-binary-sha256-x86_64-linux-gnu }}
           checksum-file: herakles-node-exporter.sha256
 
       - name: Download and verify tested amd64 musl binary
@@ -40,7 +40,7 @@ jobs:
           artifact-name: herakles-node-exporter-release-binary-x86_64-linux-musl
           target-dir: dist/x86_64-linux-musl
           file-path: herakles-node-exporter
-          expected-sha256: ""
+          expected-sha256: ${{ needs.ci.outputs.release-binary-sha256-x86_64-linux-musl }}
           checksum-file: herakles-node-exporter.sha256
 
       - name: Export amd64 glibc attestation bundle
