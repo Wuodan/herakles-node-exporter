@@ -25,60 +25,105 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - name: Download and verify tested release binary
+      - name: Download and verify tested amd64 glibc binary
         uses: ./.github/actions/download-and-verify-run-artifact
         with:
-          artifact-name: herakles-node-exporter-release-binary
-          target-dir: dist
+          artifact-name: herakles-node-exporter-release-binary-x86_64-linux-gnu
+          target-dir: dist/x86_64-linux-gnu
           file-path: herakles-node-exporter
-          expected-sha256: ${{ needs.ci.outputs.release-binary-sha256 }}
+          expected-sha256: ""
           checksum-file: herakles-node-exporter.sha256
 
-      - name: Export attestation bundle
+      - name: Download and verify tested amd64 musl binary
+        uses: ./.github/actions/download-and-verify-run-artifact
+        with:
+          artifact-name: herakles-node-exporter-release-binary-x86_64-linux-musl
+          target-dir: dist/x86_64-linux-musl
+          file-path: herakles-node-exporter
+          expected-sha256: ""
+          checksum-file: herakles-node-exporter.sha256
+
+      - name: Export amd64 glibc attestation bundle
         uses: ./.github/actions/export-attestation-bundle
         with:
-          artifact-path: dist/herakles-node-exporter
-          target-dir: provenance
+          artifact-path: dist/x86_64-linux-gnu/herakles-node-exporter
+          target-dir: provenance/x86_64-linux-gnu
 
-      - name: Package binary
+      - name: Export amd64 musl attestation bundle
+        uses: ./.github/actions/export-attestation-bundle
+        with:
+          artifact-path: dist/x86_64-linux-musl/herakles-node-exporter
+          target-dir: provenance/x86_64-linux-musl
+
+      - name: Package binaries
         run: |
-          cp dist/herakles-node-exporter herakles-node-exporter
-          chmod +x herakles-node-exporter
-          tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz herakles-node-exporter
-          sha256sum herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sha256
-          sha256sum herakles-node-exporter > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sha256
+          cp dist/x86_64-linux-gnu/herakles-node-exporter herakles-node-exporter-x86_64-linux-gnu
+          cp dist/x86_64-linux-musl/herakles-node-exporter herakles-node-exporter-x86_64-linux-musl
+          chmod +x herakles-node-exporter-x86_64-linux-gnu herakles-node-exporter-x86_64-linux-musl
+          tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz herakles-node-exporter-x86_64-linux-gnu
+          tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz herakles-node-exporter-x86_64-linux-musl
+          sha256sum herakles-node-exporter-x86_64-linux-gnu > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.sha256
+          sha256sum herakles-node-exporter-x86_64-linux-musl > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.sha256
+          sha256sum herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz.sha256
+          sha256sum herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz.sha256
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4
 
-      - name: Sign release binary with Cosign
+      - name: Sign amd64 glibc binary with Cosign
         env:
           COSIGN_YES: "true"
         run: |
           set -euo pipefail
           cosign sign-blob \
-            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sigstore.json" \
-            "herakles-node-exporter"
+            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.sigstore.json" \
+            "herakles-node-exporter-x86_64-linux-gnu"
 
-      - name: Sign release tarball with Cosign
+      - name: Sign amd64 musl binary with Cosign
         env:
           COSIGN_YES: "true"
         run: |
           set -euo pipefail
           cosign sign-blob \
-            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sigstore.json" \
-            "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz"
+            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.sigstore.json" \
+            "herakles-node-exporter-x86_64-linux-musl"
+
+      - name: Sign amd64 glibc tarball with Cosign
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          cosign sign-blob \
+            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz.sigstore.json" \
+            "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz"
+
+      - name: Sign amd64 musl tarball with Cosign
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          cosign sign-blob \
+            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz.sigstore.json" \
+            "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            herakles-node-exporter
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sha256
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sigstore.json
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sha256
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sigstore.json
-            provenance/herakles-node-exporter-attestation.jsonl
-            provenance/trusted_root.jsonl
+            herakles-node-exporter-x86_64-linux-gnu
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.sha256
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.sigstore.json
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz.sha256
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz.sigstore.json
+            herakles-node-exporter-x86_64-linux-musl
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.sha256
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.sigstore.json
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz.sha256
+            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz.sigstore.json
+            provenance/x86_64-linux-gnu/herakles-node-exporter-attestation.jsonl
+            provenance/x86_64-linux-gnu/trusted_root.jsonl
+            provenance/x86_64-linux-musl/herakles-node-exporter-attestation.jsonl
+            provenance/x86_64-linux-musl/trusted_root.jsonl

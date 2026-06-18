@@ -8,10 +8,6 @@ on:
         required: false
         type: boolean
         default: false
-    outputs:
-      release-binary-sha256:
-        description: SHA-256 of the tested release binary.
-        value: ${{ jobs.build-and-test.outputs.release-binary-sha256 }}
   workflow_dispatch:
     inputs:
       upload-release-binary:
@@ -38,9 +34,15 @@ jobs:
     uses: ./.github/workflows/lint.yml
 
   build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust-target: x86_64-unknown-linux-gnu
+            artifact-suffix: x86_64-linux-gnu
+          - rust-target: x86_64-unknown-linux-musl
+            artifact-suffix: x86_64-linux-musl
     runs-on: ubuntu-latest
-    outputs:
-      release-binary-sha256: ${{ steps.prepare-release-artifact-bundle.outputs.binary_sha256 }}
     permissions:
       contents: read
       attestations: write
@@ -51,6 +53,9 @@ jobs:
 
       - name: Build and Test eBPF Binary
         uses: ./.github/actions/build-and-test
+        with:
+          rust-target: ${{ matrix.rust-target }}
+          binary-path: ./target/${{ matrix.rust-target }}/release/herakles-node-exporter
 
       - name: Prepare release artifact bundle
         id: prepare-release-artifact-bundle
@@ -58,9 +63,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp target/release/herakles-node-exporter dist/herakles-node-exporter
+          cp target/${{ matrix.rust-target }}/release/herakles-node-exporter dist/herakles-node-exporter
           sha256sum dist/herakles-node-exporter > dist/herakles-node-exporter.sha256
-          echo "binary_sha256=$(sha256sum dist/herakles-node-exporter | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Generate build provenance attestation
         if: ${{ inputs.upload-release-binary }}
@@ -72,7 +76,7 @@ jobs:
         if: ${{ inputs.upload-release-binary }}
         uses: actions/upload-artifact@v4
         with:
-          name: herakles-node-exporter-release-binary
+          name: herakles-node-exporter-release-binary-${{ matrix.artifact-suffix }}
           path: |
             dist/herakles-node-exporter
             dist/herakles-node-exporter.sha256

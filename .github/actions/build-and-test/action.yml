@@ -6,6 +6,10 @@ inputs:
     description: Rust target to install for the build.
     required: false
     default: x86_64-unknown-linux-gnu
+  binary-path:
+    description: Path to the built exporter binary to validate.
+    required: false
+    default: ./target/x86_64-unknown-linux-gnu/release/herakles-node-exporter
 
 runs:
   using: composite
@@ -26,14 +30,19 @@ runs:
         sudo apt-get install -y \
           clang \
           libelf-dev
+        if [[ "${{ inputs.rust-target }}" == *-musl ]]; then
+          sudo apt-get install -y musl-tools
+        fi
 
     - name: Run tests
       shell: bash
-      run: cargo test
+      run: cargo test --target "${{ inputs.rust-target }}"
 
     - name: Build with eBPF
       shell: bash
-      run: cargo build --release --features ebpf
+      run: cargo build --release --features ebpf --target "${{ inputs.rust-target }}"
 
     - name: Run binary and validate its Prometheus metrics format
       uses: ./.github/actions/validate-prometheus-metrics
+      with:
+        binary-path: ${{ inputs.binary-path }}
