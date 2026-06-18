@@ -13,28 +13,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install eBPF build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            llvm \
-            libbpf-dev \
-            linux-tools-common \
-            linux-tools-generic \
-            "linux-headers-$(uname -r)" \
-            pkg-config \
-            libelf-dev \
-            zlib1g-dev
-          # Ensure bpftool is available
-          if ! which bpftool; then
-            BPFTOOL_PATH=$(find /usr/lib/linux-tools -name bpftool | head -1)
-            test -n "$BPFTOOL_PATH" || { echo "bpftool not found"; exit 1; }
-            sudo ln -sf "$BPFTOOL_PATH" /usr/local/bin/bpftool
-          fi
-          command -v bpftool
-          bpftool version
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -42,6 +20,20 @@ jobs:
 
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Install bpftool
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            linux-tools-common \
+            linux-tools-generic
+          # Ensure bpftool is available
+          if ! which bpftool; then
+            BPFTOOL_PATH="$(find /usr/lib/linux-tools -type f -name bpftool | head -1)"
+            test -n "$BPFTOOL_PATH" || { echo "bpftool not found"; exit 1; }
+            sudo ln -sf "$BPFTOOL_PATH" /usr/local/bin/bpftool
+          fi
 
       - name: Build with eBPF
         run: cargo build --release --features ebpf
