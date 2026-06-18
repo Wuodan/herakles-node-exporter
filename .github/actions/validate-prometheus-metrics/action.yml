@@ -54,9 +54,16 @@ runs:
         wait "$EXPORTER_PID" 2>/dev/null || true
         trap - EXIT
 
+        # Write paths to job env vars for later steps
         echo "HERAKLES_NODE_EXPORTER_LOG_FILE=${log_file}" >> "$GITHUB_ENV"
         echo "HERAKLES_NODE_EXPORTER_METRICS_FILE=${metrics_file}" >> "$GITHUB_ENV"
 
     - name: Validate metrics output
       shell: bash
-      run: promtool check metrics < "${HERAKLES_NODE_EXPORTER_METRICS_FILE}"
+      run: |
+        set -euo pipefail
+        # validate scraped metrics format and show exporter logs on failure
+        promtool check metrics < "${HERAKLES_NODE_EXPORTER_METRICS_FILE}" || {
+          tail -n 40 "${HERAKLES_NODE_EXPORTER_LOG_FILE}" || true
+          exit 1
+        }
