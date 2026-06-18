@@ -1,0 +1,38 @@
+name: Validate Prometheus Metrics
+description: Start the exporter, fetch /metrics, and validate Prometheus scrape format with promtool.
+
+inputs:
+  port:
+    description: HTTP port the exporter should be scraped on.
+    required: false
+    default: "9215"
+  binary-path:
+    description: Path to the exporter binary to start.
+    required: false
+    default: ./target/release/herakles-node-exporter
+
+runs:
+  using: composite
+  steps:
+    - name: Validate metrics output
+      shell: bash
+      run: |
+        set -euo pipefail
+        "${{ inputs.binary-path }}" > /tmp/herakles-node-exporter.log 2>&1 &
+        EXPORTER_PID=$!
+        trap 'kill "$EXPORTER_PID" 2>/dev/null || true; wait "$EXPORTER_PID" 2>/dev/null || true' EXIT
+
+        for _ in $(seq 1 30); do
+          if curl -fsS "http://127.0.0.1:${{ inputs.port }}/metrics" > /tmp/herakles.metrics; then
+            break
+          fi
+          sleep 1
+        done
+
+        test -s /tmp/herakles.metrics || {
+          echo "metrics endpoint did not become ready on port ${{ inputs.port }}"
+          tail -n 40 /tmp/herakles-node-exporter.log || true
+          exit 1
+        }
+
+        promtool check metrics < /tmp/herakles.metrics

@@ -1,0 +1,33 @@
+name: Build eBPF Binary
+description: Set up Rust, install eBPF build dependencies, and build the release binary with eBPF support.
+
+inputs:
+  rust-target:
+    description: Rust target to install for the build.
+    required: false
+    default: x86_64-unknown-linux-gnu
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.rust-target }}
+
+    - name: Restore Rust cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install eBPF build dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y \
+          clang \
+          libelf-dev \
+          prometheus
+
+    - name: Build with eBPF
+      shell: bash
+      run: cargo build --release --features ebpf
