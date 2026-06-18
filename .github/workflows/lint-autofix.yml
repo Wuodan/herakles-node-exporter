@@ -24,7 +24,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: lint-autofix-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
