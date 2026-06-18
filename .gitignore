@@ -5,8 +5,7 @@
 
 # eBPF generated files
 src/ebpf/bpf/vmlinux.h
-# eBPF compiled objects are build artifacts: build.rs recompiles process_io.bpf.c
-# and copies the object into the src tree on every ebpf build, so it is not tracked.
+# eBPF compiled objects are build artifacts emitted into OUT_DIR during ebpf builds.
 *.bpf.o
 
 # CodeQL artifacts
