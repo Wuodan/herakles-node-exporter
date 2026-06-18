@@ -314,7 +314,7 @@ herakles_exporter_cache_update_duration_seconds
 herakles_exporter_scrape_duration_seconds
 
 # Process count
-herakles_exporter_processes_total
+herakles_exporter_processes
 ```
 
 ### System-Level Profiling

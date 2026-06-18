@@ -107,7 +107,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                 }
             }
 
-            state.processes_total.set(exported_count as f64);
+            state.processes.set(exported_count as f64);
 
             // ========== PHASE 2: Export Group-Level Metrics ==========
             for ((group, subgroup), metrics) in group_aggregations {
@@ -146,7 +146,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
 
                     state
                         .metrics
-                        .group_cpu_seconds_total
+                        .group_cpu_seconds
                         .with_label_values(&[group.as_str(), subgroup.as_str(), "total"])
                         .set(metrics.cpu_time_total_sum);
                 }
@@ -180,22 +180,22 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                         {
                             state
                                 .metrics
-                                .group_blkio_read_bytes_total
+                                .group_blkio_read_bytes
                                 .with_label_values(&[&group, &subgroup])
                                 .set(read_bytes as f64);
                             state
                                 .metrics
-                                .group_blkio_write_bytes_total
+                                .group_blkio_write_bytes
                                 .with_label_values(&[&group, &subgroup])
                                 .set(write_bytes as f64);
                             state
                                 .metrics
-                                .group_blkio_read_syscalls_total
+                                .group_blkio_read_syscalls
                                 .with_label_values(&[&group, &subgroup])
                                 .set(read_ops as f64);
                             state
                                 .metrics
-                                .group_blkio_write_syscalls_total
+                                .group_blkio_write_syscalls
                                 .with_label_values(&[&group, &subgroup])
                                 .set(write_ops as f64);
                         }
@@ -290,21 +290,21 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                         // Read bytes
                         state
                             .metrics
-                            .system_disk_read_bytes_total
+                            .system_disk_read_bytes
                             .with_label_values(&[&device])
                             .set(stats.sectors_read as f64 * 512.0);
 
                         // Write bytes
                         state
                             .metrics
-                            .system_disk_write_bytes_total
+                            .system_disk_write_bytes
                             .with_label_values(&[&device])
                             .set(stats.sectors_written as f64 * 512.0);
 
                         // I/O time in seconds (convert from milliseconds)
                         state
                             .metrics
-                            .system_disk_io_time_seconds_total
+                            .system_disk_io_time_seconds
                             .with_label_values(&[&device])
                             .set(stats.time_io_ms as f64 / 1000.0);
 
@@ -328,42 +328,42 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                         // RX bytes
                         state
                             .metrics
-                            .system_net_rx_bytes_total
+                            .system_net_rx_bytes
                             .with_label_values(&[&device])
                             .set(stats.receive_bytes as f64);
 
                         // TX bytes
                         state
                             .metrics
-                            .system_net_tx_bytes_total
+                            .system_net_tx_bytes
                             .with_label_values(&[&device])
                             .set(stats.transmit_bytes as f64);
 
                         // RX errors
                         state
                             .metrics
-                            .system_net_rx_errors_total
+                            .system_net_rx_errors
                             .with_label_values(&[&device])
                             .set(stats.receive_errs as f64);
 
                         // TX errors
                         state
                             .metrics
-                            .system_net_tx_errors_total
+                            .system_net_tx_errors
                             .with_label_values(&[&device])
                             .set(stats.transmit_errs as f64);
 
                         // RX drops
                         state
                             .metrics
-                            .system_net_drops_total
+                            .system_net_drops
                             .with_label_values(&[device.as_str(), "rx"])
                             .set(stats.receive_drop as f64);
 
                         // TX drops
                         state
                             .metrics
-                            .system_net_drops_total
+                            .system_net_drops
                             .with_label_values(&[device.as_str(), "tx"])
                             .set(stats.transmit_drop as f64);
                     }
@@ -444,9 +444,9 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                     state.metrics.system_boot_time_seconds.set(boot_time as f64);
                     state
                         .metrics
-                        .system_context_switches_total
+                        .system_context_switches
                         .set(context_switches as f64);
-                    state.metrics.system_forks_total.set(forks as f64);
+                    state.metrics.system_forks.set(forks as f64);
                 }
                 Err(e) => warn!("Failed to read stat counters: {}", e),
             }
@@ -486,23 +486,23 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
             // Entropy
             match system::read_entropy() {
                 Ok(entropy) => {
-                    state.metrics.system_entropy_bits.set(entropy as f64);
+                    state.metrics.system_entropy_bytes.set(entropy as f64 / 8.0);
                 }
                 Err(e) => warn!("Failed to read entropy: {}", e),
             }
 
             // ========== PHASE 9: PSI (Pressure Stall Information) Metrics ==========
             if let Ok(cpu_psi) = system::read_psi_some_total("/proc/pressure/cpu") {
-                state.metrics.system_cpu_psi_wait_seconds_total.set(cpu_psi);
+                state.metrics.system_cpu_psi_wait_seconds.set(cpu_psi);
             }
             if let Ok(mem_psi) = system::read_psi_some_total("/proc/pressure/memory") {
                 state
                     .metrics
-                    .system_memory_psi_wait_seconds_total
+                    .system_memory_psi_wait_seconds
                     .set(mem_psi);
             }
             if let Ok(io_psi) = system::read_psi_some_total("/proc/pressure/io") {
-                state.metrics.system_disk_psi_wait_seconds_total.set(io_psi);
+                state.metrics.system_disk_psi_wait_seconds.set(io_psi);
             }
 
             // ========== PHASE 10: eBPF Group Network Metrics (if available) ==========
@@ -527,13 +527,13 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                         for ((group, subgroup), (rx, tx)) in net_groups {
                             state
                                 .metrics
-                                .group_net_rx_bytes_total
+                                .group_net_rx_bytes
                                 .with_label_values(&[&group, &subgroup])
                                 .set(rx as f64);
 
                             state
                                 .metrics
-                                .group_net_tx_bytes_total
+                                .group_net_tx_bytes
                                 .with_label_values(&[&group, &subgroup])
                                 .set(tx as f64);
                         }
@@ -545,7 +545,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
 
                 // NOTE: Group network connections tracking requires eBPF-based
                 // connection state tracking which is not yet implemented.
-                // The metric group_net_connections_total{proto="tcp/udp"} will be
+                // The metric group_net_connections{proto="tcp/udp"} will be
                 // added in a future enhancement.
             }
 
