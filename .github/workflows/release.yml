@@ -11,39 +11,23 @@ permissions:
 jobs:
   ci:
     uses: ./.github/workflows/test-build.yml
+    with:
+      upload-release-binary: true
 
   build-and-release:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install eBPF build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            llvm \
-            libbpf-dev \
-            pkg-config \
-            libelf-dev \
-            zlib1g-dev
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download tested release binary
+        uses: actions/download-artifact@v4
         with:
-          targets: x86_64-unknown-linux-gnu
-
-      - name: Restore Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build with eBPF
-        run: cargo build --release --features ebpf
+          name: herakles-node-exporter-release-binary
+          path: dist
 
       - name: Package binary
         run: |
-          cp target/release/herakles-node-exporter herakles-node-exporter
+          cp dist/herakles-node-exporter herakles-node-exporter
+          chmod +x herakles-node-exporter
           tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz herakles-node-exporter
           sha256sum herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sha256
 
