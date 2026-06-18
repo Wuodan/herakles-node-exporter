@@ -16,7 +16,7 @@ pub struct MemoryMetrics {
     pub system_cpu_load_1: Gauge,
     pub system_cpu_load_5: Gauge,
     pub system_cpu_load_15: Gauge,
-    pub system_cpu_psi_wait_seconds_total: Gauge,
+    pub system_cpu_psi_wait_seconds: Gauge,
 
     // ========== Memory System Metrics ==========
     pub system_memory_total_bytes: Gauge,
@@ -25,21 +25,21 @@ pub struct MemoryMetrics {
     pub system_memory_cached_bytes: Gauge,
     pub system_memory_buffers_bytes: Gauge,
     pub system_swap_used_ratio: Gauge,
-    pub system_memory_psi_wait_seconds_total: Gauge,
+    pub system_memory_psi_wait_seconds: Gauge,
 
     // ========== Disk System Metrics ==========
-    pub system_disk_read_bytes_total: GaugeVec, // labels: device
-    pub system_disk_write_bytes_total: GaugeVec, // labels: device
-    pub system_disk_io_time_seconds_total: GaugeVec, // labels: device
-    pub system_disk_queue_depth: GaugeVec,      // labels: device
-    pub system_disk_psi_wait_seconds_total: Gauge,
+    pub system_disk_read_bytes: GaugeVec,      // labels: device
+    pub system_disk_write_bytes: GaugeVec,     // labels: device
+    pub system_disk_io_time_seconds: GaugeVec, // labels: device
+    pub system_disk_queue_depth: GaugeVec,     // labels: device
+    pub system_disk_psi_wait_seconds: Gauge,
 
     // ========== Network System Metrics ==========
-    pub system_net_rx_bytes_total: GaugeVec,  // labels: iface
-    pub system_net_tx_bytes_total: GaugeVec,  // labels: iface
-    pub system_net_rx_errors_total: GaugeVec, // labels: iface
-    pub system_net_tx_errors_total: GaugeVec, // labels: iface
-    pub system_net_drops_total: GaugeVec,     // labels: iface, direction
+    pub system_net_rx_bytes: GaugeVec,  // labels: iface
+    pub system_net_tx_bytes: GaugeVec,  // labels: iface
+    pub system_net_rx_errors: GaugeVec, // labels: iface
+    pub system_net_tx_errors: GaugeVec, // labels: iface
+    pub system_net_drops: GaugeVec,     // labels: iface, direction
 
     // ========== Filesystem System Metrics ==========
     pub system_filesystem_avail_bytes: GaugeVec, // labels: device, mountpoint, fstype
@@ -78,14 +78,14 @@ pub struct MemoryMetrics {
     pub system_uname_info: GaugeVec, // labels: sysname, release, version, machine
 
     // ========== Kernel/Runtime Metrics ==========
-    pub system_context_switches_total: Gauge,
-    pub system_forks_total: Gauge,
+    pub system_context_switches: Gauge,
+    pub system_forks: Gauge,
     pub system_open_fds: GaugeVec, // labels: state (allocated/max)
-    pub system_entropy_bits: Gauge,
+    pub system_entropy_bytes: Gauge,
 
     // ========== CPU Group Metrics ==========
     pub group_cpu_usage_ratio: GaugeVec, // labels: group, subgroup
-    pub group_cpu_seconds_total: GaugeVec, // labels: group, subgroup, mode
+    pub group_cpu_seconds: GaugeVec,     // labels: group, subgroup, mode
 
     // ========== Memory Group Metrics ==========
     pub group_memory_rss_bytes: GaugeVec, // labels: group, subgroup
@@ -93,15 +93,15 @@ pub struct MemoryMetrics {
     pub group_memory_swap_bytes: GaugeVec, // labels: group, subgroup
 
     // ========== Block I/O Group Metrics ==========
-    pub group_blkio_read_bytes_total: GaugeVec, // labels: group, subgroup
-    pub group_blkio_write_bytes_total: GaugeVec, // labels: group, subgroup
-    pub group_blkio_read_syscalls_total: GaugeVec, // labels: group, subgroup
-    pub group_blkio_write_syscalls_total: GaugeVec, // labels: group, subgroup
+    pub group_blkio_read_bytes: GaugeVec, // labels: group, subgroup
+    pub group_blkio_write_bytes: GaugeVec, // labels: group, subgroup
+    pub group_blkio_read_syscalls: GaugeVec, // labels: group, subgroup
+    pub group_blkio_write_syscalls: GaugeVec, // labels: group, subgroup
 
     // ========== Network Group Metrics ==========
-    pub group_net_rx_bytes_total: GaugeVec, // labels: group, subgroup
-    pub group_net_tx_bytes_total: GaugeVec, // labels: group, subgroup
-    pub group_net_connections_total: GaugeVec, // labels: group, subgroup, proto
+    pub group_net_rx_bytes: GaugeVec,    // labels: group, subgroup
+    pub group_net_tx_bytes: GaugeVec,    // labels: group, subgroup
+    pub group_net_connections: GaugeVec, // labels: group, subgroup, proto
 }
 
 impl MemoryMetrics {
@@ -136,9 +136,9 @@ impl MemoryMetrics {
             "herakles_system_cpu_load_15",
             "System load average over 15 minutes",
         )?;
-        let system_cpu_psi_wait_seconds_total = Gauge::new(
-            "herakles_system_cpu_psi_wait_seconds_total",
-            "Total CPU pressure stall time in seconds",
+        let system_cpu_psi_wait_seconds = Gauge::new(
+            "herakles_system_cpu_psi_wait_seconds",
+            "CPU pressure stall time in seconds",
         )?;
 
         // ========== Memory System Metrics ==========
@@ -166,30 +166,30 @@ impl MemoryMetrics {
             "herakles_system_swap_used_ratio",
             "System swap memory used ratio (0.0-1.0)",
         )?;
-        let system_memory_psi_wait_seconds_total = Gauge::new(
-            "herakles_system_memory_psi_wait_seconds_total",
-            "Total memory pressure stall time in seconds",
+        let system_memory_psi_wait_seconds = Gauge::new(
+            "herakles_system_memory_psi_wait_seconds",
+            "Memory pressure stall time in seconds",
         )?;
 
         // ========== Disk System Metrics ==========
-        let system_disk_read_bytes_total = GaugeVec::new(
+        let system_disk_read_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_system_disk_read_bytes_total",
-                "Total bytes read from disk device",
+                "herakles_system_disk_read_bytes",
+                "Bytes read from disk device",
             ),
             &["device"],
         )?;
-        let system_disk_write_bytes_total = GaugeVec::new(
+        let system_disk_write_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_system_disk_write_bytes_total",
-                "Total bytes written to disk device",
+                "herakles_system_disk_write_bytes",
+                "Bytes written to disk device",
             ),
             &["device"],
         )?;
-        let system_disk_io_time_seconds_total = GaugeVec::new(
+        let system_disk_io_time_seconds = GaugeVec::new(
             Opts::new(
-                "herakles_system_disk_io_time_seconds_total",
-                "Total time spent doing I/Os in seconds",
+                "herakles_system_disk_io_time_seconds",
+                "Time spent doing I/Os in seconds",
             ),
             &["device"],
         )?;
@@ -200,44 +200,44 @@ impl MemoryMetrics {
             ),
             &["device"],
         )?;
-        let system_disk_psi_wait_seconds_total = Gauge::new(
-            "herakles_system_disk_psi_wait_seconds_total",
-            "Total I/O pressure stall time in seconds",
+        let system_disk_psi_wait_seconds = Gauge::new(
+            "herakles_system_disk_psi_wait_seconds",
+            "I/O pressure stall time in seconds",
         )?;
 
         // ========== Network System Metrics ==========
-        let system_net_rx_bytes_total = GaugeVec::new(
+        let system_net_rx_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_system_net_rx_bytes_total",
-                "Total bytes received per network interface",
+                "herakles_system_net_rx_bytes",
+                "Bytes received per network interface",
             ),
             &["iface"],
         )?;
-        let system_net_tx_bytes_total = GaugeVec::new(
+        let system_net_tx_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_system_net_tx_bytes_total",
-                "Total bytes transmitted per network interface",
+                "herakles_system_net_tx_bytes",
+                "Bytes transmitted per network interface",
             ),
             &["iface"],
         )?;
-        let system_net_rx_errors_total = GaugeVec::new(
+        let system_net_rx_errors = GaugeVec::new(
             Opts::new(
-                "herakles_system_net_rx_errors_total",
-                "Total receive errors per network interface",
+                "herakles_system_net_rx_errors",
+                "Receive errors per network interface",
             ),
             &["iface"],
         )?;
-        let system_net_tx_errors_total = GaugeVec::new(
+        let system_net_tx_errors = GaugeVec::new(
             Opts::new(
-                "herakles_system_net_tx_errors_total",
-                "Total transmit errors per network interface",
+                "herakles_system_net_tx_errors",
+                "Transmit errors per network interface",
             ),
             &["iface"],
         )?;
-        let system_net_drops_total = GaugeVec::new(
+        let system_net_drops = GaugeVec::new(
             Opts::new(
-                "herakles_system_net_drops_total",
-                "Total dropped packets per network interface and direction",
+                "herakles_system_net_drops",
+                "Dropped packets per network interface and direction",
             ),
             &["iface", "direction"],
         )?;
@@ -341,14 +341,11 @@ impl MemoryMetrics {
         )?;
 
         // ========== Kernel/Runtime Metrics ==========
-        let system_context_switches_total = Gauge::new(
-            "herakles_system_context_switches_total",
-            "Total number of context switches",
+        let system_context_switches = Gauge::new(
+            "herakles_system_context_switches",
+            "Number of context switches",
         )?;
-        let system_forks_total = Gauge::new(
-            "herakles_system_forks_total",
-            "Total number of forks since boot",
-        )?;
+        let system_forks = Gauge::new("herakles_system_forks", "Number of forks since boot")?;
         let system_open_fds = GaugeVec::new(
             Opts::new(
                 "herakles_system_open_fds",
@@ -356,8 +353,10 @@ impl MemoryMetrics {
             ),
             &["state"],
         )?;
-        let system_entropy_bits =
-            Gauge::new("herakles_system_entropy_bits", "Available entropy in bits")?;
+        let system_entropy_bytes = Gauge::new(
+            "herakles_system_entropy_bytes",
+            "Available entropy in bytes",
+        )?;
 
         // ========== CPU Group Metrics ==========
         let group_cpu_usage_ratio = GaugeVec::new(
@@ -367,10 +366,10 @@ impl MemoryMetrics {
             ),
             &["group", "subgroup"],
         )?;
-        let group_cpu_seconds_total = GaugeVec::new(
+        let group_cpu_seconds = GaugeVec::new(
             Opts::new(
-                "herakles_group_cpu_seconds_total",
-                "Total CPU time in seconds per group, subgroup, and mode",
+                "herakles_group_cpu_seconds",
+                "CPU time in seconds per group, subgroup, and mode",
             ),
             &["group", "subgroup", "mode"],
         )?;
@@ -399,54 +398,54 @@ impl MemoryMetrics {
         )?;
 
         // ========== Block I/O Group Metrics ==========
-        let group_blkio_read_bytes_total = GaugeVec::new(
+        let group_blkio_read_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_group_blkio_read_bytes_total",
-                "Total bytes read per group and subgroup",
+                "herakles_group_blkio_read_bytes",
+                "Bytes read per group and subgroup",
             ),
             &["group", "subgroup"],
         )?;
-        let group_blkio_write_bytes_total = GaugeVec::new(
+        let group_blkio_write_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_group_blkio_write_bytes_total",
-                "Total bytes written per group and subgroup",
+                "herakles_group_blkio_write_bytes",
+                "Bytes written per group and subgroup",
             ),
             &["group", "subgroup"],
         )?;
-        let group_blkio_read_syscalls_total = GaugeVec::new(
+        let group_blkio_read_syscalls = GaugeVec::new(
             Opts::new(
-                "herakles_group_blkio_read_syscalls_total",
-                "Total read syscalls per group and subgroup",
+                "herakles_group_blkio_read_syscalls",
+                "Read syscalls per group and subgroup",
             ),
             &["group", "subgroup"],
         )?;
-        let group_blkio_write_syscalls_total = GaugeVec::new(
+        let group_blkio_write_syscalls = GaugeVec::new(
             Opts::new(
-                "herakles_group_blkio_write_syscalls_total",
-                "Total write syscalls per group and subgroup",
+                "herakles_group_blkio_write_syscalls",
+                "Write syscalls per group and subgroup",
             ),
             &["group", "subgroup"],
         )?;
 
         // ========== Network Group Metrics ==========
-        let group_net_rx_bytes_total = GaugeVec::new(
+        let group_net_rx_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_group_net_rx_bytes_total",
-                "Total bytes received per group and subgroup (eBPF)",
+                "herakles_group_net_rx_bytes",
+                "Bytes received per group and subgroup (eBPF)",
             ),
             &["group", "subgroup"],
         )?;
-        let group_net_tx_bytes_total = GaugeVec::new(
+        let group_net_tx_bytes = GaugeVec::new(
             Opts::new(
-                "herakles_group_net_tx_bytes_total",
-                "Total bytes transmitted per group and subgroup (eBPF)",
+                "herakles_group_net_tx_bytes",
+                "Bytes transmitted per group and subgroup (eBPF)",
             ),
             &["group", "subgroup"],
         )?;
-        let group_net_connections_total = GaugeVec::new(
+        let group_net_connections = GaugeVec::new(
             Opts::new(
-                "herakles_group_net_connections_total",
-                "Total network connections per group, subgroup, and protocol",
+                "herakles_group_net_connections",
+                "Network connections per group, subgroup, and protocol",
             ),
             &["group", "subgroup", "proto"],
         )?;
@@ -460,7 +459,7 @@ impl MemoryMetrics {
         registry.register(Box::new(system_cpu_load_1.clone()))?;
         registry.register(Box::new(system_cpu_load_5.clone()))?;
         registry.register(Box::new(system_cpu_load_15.clone()))?;
-        registry.register(Box::new(system_cpu_psi_wait_seconds_total.clone()))?;
+        registry.register(Box::new(system_cpu_psi_wait_seconds.clone()))?;
 
         // Memory System
         registry.register(Box::new(system_memory_total_bytes.clone()))?;
@@ -469,21 +468,21 @@ impl MemoryMetrics {
         registry.register(Box::new(system_memory_cached_bytes.clone()))?;
         registry.register(Box::new(system_memory_buffers_bytes.clone()))?;
         registry.register(Box::new(system_swap_used_ratio.clone()))?;
-        registry.register(Box::new(system_memory_psi_wait_seconds_total.clone()))?;
+        registry.register(Box::new(system_memory_psi_wait_seconds.clone()))?;
 
         // Disk System
-        registry.register(Box::new(system_disk_read_bytes_total.clone()))?;
-        registry.register(Box::new(system_disk_write_bytes_total.clone()))?;
-        registry.register(Box::new(system_disk_io_time_seconds_total.clone()))?;
+        registry.register(Box::new(system_disk_read_bytes.clone()))?;
+        registry.register(Box::new(system_disk_write_bytes.clone()))?;
+        registry.register(Box::new(system_disk_io_time_seconds.clone()))?;
         registry.register(Box::new(system_disk_queue_depth.clone()))?;
-        registry.register(Box::new(system_disk_psi_wait_seconds_total.clone()))?;
+        registry.register(Box::new(system_disk_psi_wait_seconds.clone()))?;
 
         // Network System
-        registry.register(Box::new(system_net_rx_bytes_total.clone()))?;
-        registry.register(Box::new(system_net_tx_bytes_total.clone()))?;
-        registry.register(Box::new(system_net_rx_errors_total.clone()))?;
-        registry.register(Box::new(system_net_tx_errors_total.clone()))?;
-        registry.register(Box::new(system_net_drops_total.clone()))?;
+        registry.register(Box::new(system_net_rx_bytes.clone()))?;
+        registry.register(Box::new(system_net_tx_bytes.clone()))?;
+        registry.register(Box::new(system_net_rx_errors.clone()))?;
+        registry.register(Box::new(system_net_tx_errors.clone()))?;
+        registry.register(Box::new(system_net_drops.clone()))?;
 
         // Filesystem System
         registry.register(Box::new(system_filesystem_avail_bytes.clone()))?;
@@ -511,14 +510,14 @@ impl MemoryMetrics {
         registry.register(Box::new(system_uname_info.clone()))?;
 
         // Kernel/Runtime
-        registry.register(Box::new(system_context_switches_total.clone()))?;
-        registry.register(Box::new(system_forks_total.clone()))?;
+        registry.register(Box::new(system_context_switches.clone()))?;
+        registry.register(Box::new(system_forks.clone()))?;
         registry.register(Box::new(system_open_fds.clone()))?;
-        registry.register(Box::new(system_entropy_bits.clone()))?;
+        registry.register(Box::new(system_entropy_bytes.clone()))?;
 
         // CPU Group
         registry.register(Box::new(group_cpu_usage_ratio.clone()))?;
-        registry.register(Box::new(group_cpu_seconds_total.clone()))?;
+        registry.register(Box::new(group_cpu_seconds.clone()))?;
 
         // Memory Group
         registry.register(Box::new(group_memory_rss_bytes.clone()))?;
@@ -526,15 +525,15 @@ impl MemoryMetrics {
         registry.register(Box::new(group_memory_swap_bytes.clone()))?;
 
         // Block I/O Group
-        registry.register(Box::new(group_blkio_read_bytes_total.clone()))?;
-        registry.register(Box::new(group_blkio_write_bytes_total.clone()))?;
-        registry.register(Box::new(group_blkio_read_syscalls_total.clone()))?;
-        registry.register(Box::new(group_blkio_write_syscalls_total.clone()))?;
+        registry.register(Box::new(group_blkio_read_bytes.clone()))?;
+        registry.register(Box::new(group_blkio_write_bytes.clone()))?;
+        registry.register(Box::new(group_blkio_read_syscalls.clone()))?;
+        registry.register(Box::new(group_blkio_write_syscalls.clone()))?;
 
         // Network Group
-        registry.register(Box::new(group_net_rx_bytes_total.clone()))?;
-        registry.register(Box::new(group_net_tx_bytes_total.clone()))?;
-        registry.register(Box::new(group_net_connections_total.clone()))?;
+        registry.register(Box::new(group_net_rx_bytes.clone()))?;
+        registry.register(Box::new(group_net_tx_bytes.clone()))?;
+        registry.register(Box::new(group_net_connections.clone()))?;
 
         Ok(Self {
             system_cpu_usage_ratio,
@@ -544,24 +543,24 @@ impl MemoryMetrics {
             system_cpu_load_1,
             system_cpu_load_5,
             system_cpu_load_15,
-            system_cpu_psi_wait_seconds_total,
+            system_cpu_psi_wait_seconds,
             system_memory_total_bytes,
             system_memory_available_bytes,
             system_memory_used_ratio,
             system_memory_cached_bytes,
             system_memory_buffers_bytes,
             system_swap_used_ratio,
-            system_memory_psi_wait_seconds_total,
-            system_disk_read_bytes_total,
-            system_disk_write_bytes_total,
-            system_disk_io_time_seconds_total,
+            system_memory_psi_wait_seconds,
+            system_disk_read_bytes,
+            system_disk_write_bytes,
+            system_disk_io_time_seconds,
             system_disk_queue_depth,
-            system_disk_psi_wait_seconds_total,
-            system_net_rx_bytes_total,
-            system_net_tx_bytes_total,
-            system_net_rx_errors_total,
-            system_net_tx_errors_total,
-            system_net_drops_total,
+            system_disk_psi_wait_seconds,
+            system_net_rx_bytes,
+            system_net_tx_bytes,
+            system_net_rx_errors,
+            system_net_tx_errors,
+            system_net_drops,
             system_filesystem_avail_bytes,
             system_filesystem_size_bytes,
             system_filesystem_files,
@@ -581,39 +580,39 @@ impl MemoryMetrics {
             system_uptime_seconds,
             system_boot_time_seconds,
             system_uname_info,
-            system_context_switches_total,
-            system_forks_total,
+            system_context_switches,
+            system_forks,
             system_open_fds,
-            system_entropy_bits,
+            system_entropy_bytes,
             group_cpu_usage_ratio,
-            group_cpu_seconds_total,
+            group_cpu_seconds,
             group_memory_rss_bytes,
             group_memory_pss_bytes,
             group_memory_swap_bytes,
-            group_blkio_read_bytes_total,
-            group_blkio_write_bytes_total,
-            group_blkio_read_syscalls_total,
-            group_blkio_write_syscalls_total,
-            group_net_rx_bytes_total,
-            group_net_tx_bytes_total,
-            group_net_connections_total,
+            group_blkio_read_bytes,
+            group_blkio_write_bytes,
+            group_blkio_read_syscalls,
+            group_blkio_write_syscalls,
+            group_net_rx_bytes,
+            group_net_tx_bytes,
+            group_net_connections,
         })
     }
 
     /// Resets all GaugeVec metrics to zero (used before updating with fresh data).
     pub fn reset(&self) {
         // Disk System
-        self.system_disk_read_bytes_total.reset();
-        self.system_disk_write_bytes_total.reset();
-        self.system_disk_io_time_seconds_total.reset();
+        self.system_disk_read_bytes.reset();
+        self.system_disk_write_bytes.reset();
+        self.system_disk_io_time_seconds.reset();
         self.system_disk_queue_depth.reset();
 
         // Network System
-        self.system_net_rx_bytes_total.reset();
-        self.system_net_tx_bytes_total.reset();
-        self.system_net_rx_errors_total.reset();
-        self.system_net_tx_errors_total.reset();
-        self.system_net_drops_total.reset();
+        self.system_net_rx_bytes.reset();
+        self.system_net_tx_bytes.reset();
+        self.system_net_rx_errors.reset();
+        self.system_net_tx_errors.reset();
+        self.system_net_drops.reset();
 
         // Filesystem System
         self.system_filesystem_avail_bytes.reset();
@@ -630,7 +629,7 @@ impl MemoryMetrics {
 
         // CPU Group
         self.group_cpu_usage_ratio.reset();
-        self.group_cpu_seconds_total.reset();
+        self.group_cpu_seconds.reset();
 
         // Memory Group
         self.group_memory_rss_bytes.reset();
@@ -638,14 +637,14 @@ impl MemoryMetrics {
         self.group_memory_swap_bytes.reset();
 
         // Block I/O Group
-        self.group_blkio_read_bytes_total.reset();
-        self.group_blkio_write_bytes_total.reset();
-        self.group_blkio_read_syscalls_total.reset();
-        self.group_blkio_write_syscalls_total.reset();
+        self.group_blkio_read_bytes.reset();
+        self.group_blkio_write_bytes.reset();
+        self.group_blkio_read_syscalls.reset();
+        self.group_blkio_write_syscalls.reset();
 
         // Network Group
-        self.group_net_rx_bytes_total.reset();
-        self.group_net_tx_bytes_total.reset();
-        self.group_net_connections_total.reset();
+        self.group_net_rx_bytes.reset();
+        self.group_net_tx_bytes.reset();
+        self.group_net_connections.reset();
     }
 }

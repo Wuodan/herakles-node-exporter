@@ -764,8 +764,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "herakles_exporter_scrape_duration_seconds",
         "Time spent serving /metrics request (reading from cache)",
     )?;
-    let processes_total = Gauge::new(
-        "herakles_exporter_processes_total",
+    let processes = Gauge::new(
+        "herakles_exporter_processes",
         "Number of processes currently exported by herakles-node-exporter",
     )?;
     let cache_update_duration = Gauge::new(
@@ -790,7 +790,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     registry.register(Box::new(scrape_duration.clone()))?;
-    registry.register(Box::new(processes_total.clone()))?;
+    registry.register(Box::new(processes.clone()))?;
     registry.register(Box::new(cache_update_duration.clone()))?;
     registry.register(Box::new(cache_update_success.clone()))?;
     registry.register(Box::new(cache_updating.clone()))?;
@@ -870,7 +870,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         registry,
         metrics,
         scrape_duration,
-        processes_total,
+        processes,
         cache_update_duration,
         cache_update_success,
         cache_updating,

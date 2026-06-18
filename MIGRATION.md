@@ -65,7 +65,7 @@ All Prometheus metrics now follow the convention: **`herakles_<module>_<scope>_<
 | Old Metric Name | New Metric Name | Notes |
 |----------------|-----------------|-------|
 | `herakles_proc_mem_scrape_duration_seconds` | `herakles_exporter_scrape_duration_seconds` | Metrics scrape duration |
-| `herakles_proc_mem_processes_total` | `herakles_exporter_processes_total` | Number of processes exported |
+| `herakles_proc_mem_processes_total` | `herakles_exporter_processes` | Number of processes exported |
 | `herakles_proc_mem_cache_update_duration_seconds` | `herakles_exporter_cache_update_duration_seconds` | Cache update duration |
 | `herakles_proc_mem_cache_update_success` | `herakles_exporter_cache_update_success` | Cache update success status |
 | `herakles_proc_mem_cache_updating` | `herakles_exporter_cache_updating` | Cache update in progress flag |
@@ -192,7 +192,7 @@ sed -i 's/herakles_proc_mem_group_cpu_percent_sum/herakles_cpu_group_usage_perce
 
 # Replace exporter metrics
 sed -i 's/herakles_proc_mem_scrape_duration_seconds/herakles_exporter_scrape_duration_seconds/g' dashboard.json
-sed -i 's/herakles_proc_mem_processes_total/herakles_exporter_processes_total/g' dashboard.json
+sed -i 's/herakles_proc_mem_processes_total/herakles_exporter_processes/g' dashboard.json
 ```
 
 Then import the updated dashboard JSON back into Grafana.

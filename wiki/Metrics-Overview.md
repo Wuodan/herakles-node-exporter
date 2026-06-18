@@ -257,7 +257,7 @@ These metrics provide observability into the exporter itself.
 | Metric | Type | Description |
 |--------|------|-------------|
 | `herakles_exporter_scrape_duration_seconds` | Gauge | Time spent serving /metrics request |
-| `herakles_exporter_processes_total` | Gauge | Number of processes currently exported |
+| `herakles_exporter_processes` | Gauge | Number of processes currently exported |
 | `herakles_exporter_cache_update_duration_seconds` | Gauge | Time spent updating the cache |
 | `herakles_exporter_cache_update_success` | Gauge | Last cache update success (1) or failure (0) |
 | `herakles_exporter_cache_updating` | Gauge | Cache update in progress (1) or idle (0) |
@@ -269,9 +269,9 @@ These metrics provide observability into the exporter itself.
 # TYPE herakles_exporter_scrape_duration_seconds gauge
 herakles_exporter_scrape_duration_seconds 0.015
 
-# HELP herakles_exporter_processes_total Number of processes currently exported
-# TYPE herakles_exporter_processes_total gauge
-herakles_exporter_processes_total 156
+# HELP herakles_exporter_processes Number of processes currently exported
+# TYPE herakles_exporter_processes gauge
+herakles_exporter_processes 156
 
 # HELP herakles_exporter_cache_update_duration_seconds Time spent updating the process metrics cache
 # TYPE herakles_exporter_cache_update_duration_seconds gauge
