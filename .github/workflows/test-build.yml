@@ -1,0 +1,20 @@
+name: Test Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build eBPF binary
+        uses: ./.github/actions/build-ebpf-binary
+
+      - name: Validate Prometheus metrics format
+        uses: ./.github/actions/validate-prometheus-metrics

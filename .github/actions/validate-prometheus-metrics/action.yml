@@ -1,0 +1,64 @@
+name: Validate Prometheus Metrics
+description: Start the exporter, fetch /metrics, and validate Prometheus scrape format with promtool.
+
+inputs:
+  port:
+    description: HTTP port the exporter should be scraped on.
+    required: false
+    default: "9215"
+  binary-path:
+    description: Path to the exporter binary to start.
+    required: false
+    default: ./target/release/herakles-node-exporter
+
+runs:
+  using: composite
+  steps:
+
+    - name: Install Prometheus for promtool
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y \
+          prometheus
+
+    - name: Capture metrics output
+      shell: bash
+      outputs:
+
+      run: |
+        set -euo pipefail
+        # create unique temp dir for log file
+        temp_dir="$(mktemp)"
+        log_file="${temp_dir}}/herakles-node-exporter.log"
+
+        # run binary and write output to log file
+        "${{ inputs.binary-path }}" > ${log_file} 2>&1 &
+        # capture process id to kill it later
+        EXPORTER_PID=$!
+        trap 'kill "$EXPORTER_PID" 2>/dev/null || true; wait "$EXPORTER_PID" 2>/dev/null || true' EXIT
+
+        # wait for port to be ready
+        for _ in $(seq 1 30); do
+          if curl -fsS "http://127.0.0.1:${{ inputs.port }}/metrics" > ${temp_dir}/herakles.metrics; then
+            break
+          fi
+          sleep 1
+        done
+        # validate port became ready
+        test -s ${temp_dir}/herakles.metrics || {
+          echo "metrics endpoint did not become ready on port ${{ inputs.port }}"
+          tail -n 40 ${temp_dir}/herakles-node-exporter.log || true
+          exit 1
+        }
+        # cleanup port verification artifacts and kill process
+        rm ${temp_dir}/herakles.metrics
+        kill "$EXPORTER_PID"
+        
+        # Write log file path to job env vars for later steps
+        echo "HERAKLES_NODE_EXPORTER_LOG_FILE=${log_file}" >> "$GITHUB_ENV"
+
+    - name: Validate metrics output
+      shell: bash
+      run: promtool check metrics < "${HERAKLES_NODE_EXPORTER_LOG_FILE}"

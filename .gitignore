@@ -5,9 +5,10 @@
 
 # eBPF generated files
 src/ebpf/bpf/vmlinux.h
-# eBPF compiled objects in OUT_DIR are ignored, but keep the embedded one in src tree
+# eBPF compiled objects
 *.bpf.o
-!src/ebpf/bpf/process_io.bpf.o
 
 # CodeQL artifacts
 _codeql_detected_source_root
+
+/.cargo-home/
