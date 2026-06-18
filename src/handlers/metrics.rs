@@ -496,10 +496,7 @@ pub async fn metrics_handler(State(state): State<SharedState>) -> Result<String,
                 state.metrics.system_cpu_psi_wait_seconds.set(cpu_psi);
             }
             if let Ok(mem_psi) = system::read_psi_some_total("/proc/pressure/memory") {
-                state
-                    .metrics
-                    .system_memory_psi_wait_seconds
-                    .set(mem_psi);
+                state.metrics.system_memory_psi_wait_seconds.set(mem_psi);
             }
             if let Ok(io_psi) = system::read_psi_some_total("/proc/pressure/io") {
                 state.metrics.system_disk_psi_wait_seconds.set(io_psi);
