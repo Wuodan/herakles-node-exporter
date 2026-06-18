@@ -39,10 +39,20 @@ jobs:
       - name: Build and Test eBPF Binary
         uses: ./.github/actions/build-and-test
 
+      - name: Prepare release artifact bundle
+        if: ${{ inputs.upload-release-binary }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp target/release/herakles-node-exporter dist/herakles-node-exporter
+          sha256sum dist/herakles-node-exporter > dist/herakles-node-exporter.sha256
+
       - name: Upload tested release binary
         if: ${{ inputs.upload-release-binary }}
         uses: actions/upload-artifact@v4
         with:
           name: herakles-node-exporter-release-binary
-          path: target/release/herakles-node-exporter
+          path: |
+            dist/herakles-node-exporter
+            dist/herakles-node-exporter.sha256
           if-no-files-found: error

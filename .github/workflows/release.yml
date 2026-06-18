@@ -24,6 +24,11 @@ jobs:
           name: herakles-node-exporter-release-binary
           path: dist
 
+      - name: Verify tested release binary checksum
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c herakles-node-exporter.sha256)
+
       - name: Package binary
         run: |
           cp dist/herakles-node-exporter herakles-node-exporter
