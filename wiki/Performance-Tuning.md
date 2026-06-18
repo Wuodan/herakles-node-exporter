@@ -320,7 +320,7 @@ Check these metrics:
 herakles_exporter_cache_update_duration_seconds
 
 # Number of exported processes
-herakles_exporter_processes_total
+herakles_exporter_processes
 
 # Scrape duration (time to serve /metrics)
 herakles_exporter_scrape_duration_seconds

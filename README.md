@@ -262,7 +262,7 @@ herakles-node-exporter subgroups --group db --verbose
 | Metric | Type | Description |
 |---|---|---|
 | `herakles_exporter_scrape_duration_seconds` | Gauge | Time spent serving `/metrics` (reading from cache) |
-| `herakles_exporter_processes_total` | Gauge | Number of processes currently exported |
+| `herakles_exporter_processes` | Gauge | Number of processes currently exported |
 | `herakles_exporter_cache_update_duration_seconds` | Gauge | Time spent on last background cache update |
 | `herakles_exporter_cache_update_success` | Gauge | 1 if last cache update succeeded, 0 if failed |
 | `herakles_exporter_cache_updating` | Gauge | 1 if cache update is in progress, 0 if idle |
@@ -277,14 +277,14 @@ These are the primary metrics for alerting and dashboards. All aggregated at `(g
 | `herakles_group_memory_pss_bytes` | Gauge | Sum of PSS bytes (deduplicates shared memory) | group, subgroup |
 | `herakles_group_memory_swap_bytes` | Gauge | Sum of swap bytes | group, subgroup |
 | `herakles_group_cpu_usage_ratio` | Gauge | CPU usage ratio (0.0–1.0) | group, subgroup |
-| `herakles_group_cpu_seconds_total` | Counter | Total CPU time by mode | group, subgroup, mode |
-| `herakles_group_blkio_read_bytes_total` | Counter | Total bytes read | group, subgroup |
-| `herakles_group_blkio_write_bytes_total` | Counter | Total bytes written | group, subgroup |
-| `herakles_group_blkio_read_syscalls_total` | Counter | Total read syscalls | group, subgroup |
-| `herakles_group_blkio_write_syscalls_total` | Counter | Total write syscalls | group, subgroup |
-| `herakles_group_net_rx_bytes_total` | Counter | Total bytes received (eBPF) | group, subgroup |
-| `herakles_group_net_tx_bytes_total` | Counter | Total bytes transmitted (eBPF) | group, subgroup |
-| `herakles_group_net_connections_total` | Gauge | Total network connections by protocol (eBPF) | group, subgroup, proto |
+| `herakles_group_cpu_seconds` | Gauge | CPU time by mode | group, subgroup, mode |
+| `herakles_group_blkio_read_bytes` | Gauge | Bytes read | group, subgroup |
+| `herakles_group_blkio_write_bytes` | Gauge | Bytes written | group, subgroup |
+| `herakles_group_blkio_read_syscalls` | Gauge | Read syscalls | group, subgroup |
+| `herakles_group_blkio_write_syscalls` | Gauge | Write syscalls | group, subgroup |
+| `herakles_group_net_rx_bytes` | Gauge | Bytes received (eBPF) | group, subgroup |
+| `herakles_group_net_tx_bytes` | Gauge | Bytes transmitted (eBPF) | group, subgroup |
+| `herakles_group_net_connections` | Gauge | Network connections by protocol (eBPF) | group, subgroup, proto |
 
 ### System Memory Metrics
 
@@ -296,7 +296,7 @@ These are the primary metrics for alerting and dashboards. All aggregated at `(g
 | `herakles_system_memory_cached_bytes` | Gauge | Page cache memory |
 | `herakles_system_memory_buffers_bytes` | Gauge | Buffer cache memory |
 | `herakles_system_swap_used_ratio` | Gauge | Swap used ratio (0.0–1.0) |
-| `herakles_system_memory_psi_wait_seconds_total` | Counter | Total memory pressure stall time |
+| `herakles_system_memory_psi_wait_seconds` | Gauge | Memory pressure stall time |
 
 ### System CPU Metrics
 
@@ -309,17 +309,17 @@ These are the primary metrics for alerting and dashboards. All aggregated at `(g
 | `herakles_system_cpu_load_1` | Gauge | Load average (1 min) | — |
 | `herakles_system_cpu_load_5` | Gauge | Load average (5 min) | — |
 | `herakles_system_cpu_load_15` | Gauge | Load average (15 min) | — |
-| `herakles_system_cpu_psi_wait_seconds_total` | Counter | Total CPU pressure stall time | — |
+| `herakles_system_cpu_psi_wait_seconds` | Gauge | CPU pressure stall time | — |
 
 ### Disk I/O Metrics
 
 | Metric | Type | Description | Labels |
 |---|---|---|---|
-| `herakles_system_disk_read_bytes_total` | Counter | Total bytes read | device |
-| `herakles_system_disk_write_bytes_total` | Counter | Total bytes written | device |
-| `herakles_system_disk_io_time_seconds_total` | Counter | Total time doing I/Os | device |
+| `herakles_system_disk_read_bytes` | Gauge | Bytes read | device |
+| `herakles_system_disk_write_bytes` | Gauge | Bytes written | device |
+| `herakles_system_disk_io_time_seconds` | Gauge | Time doing I/Os | device |
 | `herakles_system_disk_queue_depth` | Gauge | I/O operations currently in progress | device |
-| `herakles_system_disk_psi_wait_seconds_total` | Counter | Total I/O pressure stall time | — |
+| `herakles_system_disk_psi_wait_seconds` | Gauge | I/O pressure stall time | — |
 
 ### Filesystem Metrics
 
@@ -334,11 +334,11 @@ These are the primary metrics for alerting and dashboards. All aggregated at `(g
 
 | Metric | Type | Description | Labels |
 |---|---|---|---|
-| `herakles_system_net_rx_bytes_total` | Counter | Bytes received | iface |
-| `herakles_system_net_tx_bytes_total` | Counter | Bytes transmitted | iface |
-| `herakles_system_net_rx_errors_total` | Counter | Receive errors | iface |
-| `herakles_system_net_tx_errors_total` | Counter | Transmit errors | iface |
-| `herakles_system_net_drops_total` | Counter | Dropped packets | iface, direction |
+| `herakles_system_net_rx_bytes` | Gauge | Bytes received | iface |
+| `herakles_system_net_tx_bytes` | Gauge | Bytes transmitted | iface |
+| `herakles_system_net_rx_errors` | Gauge | Receive errors | iface |
+| `herakles_system_net_tx_errors` | Gauge | Transmit errors | iface |
+| `herakles_system_net_drops` | Gauge | Dropped packets | iface, direction |
 
 ### TCP Connection State Metrics
 
@@ -366,10 +366,10 @@ Always registered in the Prometheus registry. Only updated when `ebpf` is compil
 | `herakles_system_uptime_seconds` | Gauge | System uptime | — |
 | `herakles_system_boot_time_seconds` | Gauge | Boot time (Unix timestamp) | — |
 | `herakles_system_uname_info` | Gauge | Kernel/arch info (always 1) | sysname, release, version, machine |
-| `herakles_system_context_switches_total` | Counter | Total context switches | — |
-| `herakles_system_forks_total` | Counter | Total forks since boot | — |
+| `herakles_system_context_switches` | Gauge | Context switches | — |
+| `herakles_system_forks` | Gauge | Forks since boot | — |
 | `herakles_system_open_fds` | Gauge | Open file descriptors system-wide | state |
-| `herakles_system_entropy_bits` | Gauge | Available entropy in bits | — |
+| `herakles_system_entropy_bytes` | Gauge | Available entropy in bytes | — |
 
 ### eBPF Subsystem Metrics
 
@@ -627,10 +627,10 @@ herakles_group_memory_rss_bytes{subgroup="postgres"}
 herakles_group_memory_pss_bytes{group="db"}
 
 # Disk read throughput per group (bytes/sec)
-rate(herakles_group_blkio_read_bytes_total[5m])
+rate(herakles_group_blkio_read_bytes[5m])
 
 # Disk write throughput per block device
-rate(herakles_system_disk_write_bytes_total[5m])
+rate(herakles_system_disk_write_bytes[5m])
 
 # Filesystem usage per mountpoint (0.0–1.0)
 1 - (herakles_system_filesystem_avail_bytes / herakles_system_filesystem_size_bytes)
@@ -639,19 +639,19 @@ rate(herakles_system_disk_write_bytes_total[5m])
 (herakles_system_filesystem_avail_bytes / herakles_system_filesystem_size_bytes) < 0.1
 
 # Network receive throughput per interface
-rate(herakles_system_net_rx_bytes_total[5m])
+rate(herakles_system_net_rx_bytes[5m])
 
 # Network transmit throughput per process group (requires eBPF)
-rate(herakles_group_net_tx_bytes_total[5m])
+rate(herakles_group_net_tx_bytes[5m])
 
 # CPU pressure stall rate — fraction of time stalled on CPU
-rate(herakles_system_cpu_psi_wait_seconds_total[5m])
+rate(herakles_system_cpu_psi_wait_seconds[5m])
 
 # Memory pressure stall rate
-rate(herakles_system_memory_psi_wait_seconds_total[5m])
+rate(herakles_system_memory_psi_wait_seconds[5m])
 
 # I/O pressure stall rate
-rate(herakles_system_disk_psi_wait_seconds_total[5m])
+rate(herakles_system_disk_psi_wait_seconds[5m])
 
 # Alert: system memory pressure above 90%
 herakles_system_memory_used_ratio > 0.9
