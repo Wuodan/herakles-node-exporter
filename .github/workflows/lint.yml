@@ -1,0 +1,111 @@
+name: Lint
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    branches-ignore:
+      - lint-autofix/**
+  push:
+    branches-ignore:
+      - lint-autofix/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-rust:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+
+  check-non-rust:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Lint GitHub Actions workflows
+        id: actionlint
+        continue-on-error: true
+        uses: rhysd/actionlint@v1.7.12
+
+      - name: Lint Markdown
+        id: markdown
+        continue-on-error: true
+        uses: DavidAnson/markdownlint-cli2-action@v23
+        with:
+          globs: |
+            **/*.md
+            !target/**
+
+      - name: Lint shell scripts
+        id: shellcheck
+        continue-on-error: true
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: .
+          check_together: "yes"
+          ignore_paths: target
+
+      - name: Setup Taplo
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+
+      - name: Check TOML formatting
+        id: taplo
+        continue-on-error: true
+        shell: bash
+        run: taplo fmt --check --diff .
+
+      - name: Lint Dockerfile
+        id: hadolint
+        continue-on-error: true
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+
+      - name: Summarize non-Rust lint failures
+        if: |
+          always() &&
+          (
+            steps.actionlint.outcome == 'failure' ||
+            steps.markdown.outcome == 'failure' ||
+            steps.shellcheck.outcome == 'failure' ||
+            steps.taplo.outcome == 'failure' ||
+            steps.hadolint.outcome == 'failure'
+          )
+        run: |
+          failed_steps=()
+          [[ "${{ steps.actionlint.outcome }}" == "failure" ]] && failed_steps+=("Lint GitHub Actions workflows")
+          [[ "${{ steps.markdown.outcome }}" == "failure" ]] && failed_steps+=("Lint Markdown")
+          [[ "${{ steps.shellcheck.outcome }}" == "failure" ]] && failed_steps+=("Lint shell scripts")
+          [[ "${{ steps.taplo.outcome }}" == "failure" ]] && failed_steps+=("Check TOML formatting")
+          [[ "${{ steps.hadolint.outcome }}" == "failure" ]] && failed_steps+=("Lint Dockerfile")
+          echo "Non-Rust lint failures:"
+          for step in "${failed_steps[@]}"; do
+            echo "- ${step}"
+          done
+          exit 1
