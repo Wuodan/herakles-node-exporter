@@ -31,7 +31,7 @@ pub struct MemoryMetrics {
     pub system_disk_read_bytes: GaugeVec,      // labels: device
     pub system_disk_write_bytes: GaugeVec,     // labels: device
     pub system_disk_io_time_seconds: GaugeVec, // labels: device
-    pub system_disk_queue_depth: GaugeVec,      // labels: device
+    pub system_disk_queue_depth: GaugeVec,     // labels: device
     pub system_disk_psi_wait_seconds: Gauge,
 
     // ========== Network System Metrics ==========
@@ -85,7 +85,7 @@ pub struct MemoryMetrics {
 
     // ========== CPU Group Metrics ==========
     pub group_cpu_usage_ratio: GaugeVec, // labels: group, subgroup
-    pub group_cpu_seconds: GaugeVec, // labels: group, subgroup, mode
+    pub group_cpu_seconds: GaugeVec,     // labels: group, subgroup, mode
 
     // ========== Memory Group Metrics ==========
     pub group_memory_rss_bytes: GaugeVec, // labels: group, subgroup
@@ -99,8 +99,8 @@ pub struct MemoryMetrics {
     pub group_blkio_write_syscalls: GaugeVec, // labels: group, subgroup
 
     // ========== Network Group Metrics ==========
-    pub group_net_rx_bytes: GaugeVec, // labels: group, subgroup
-    pub group_net_tx_bytes: GaugeVec, // labels: group, subgroup
+    pub group_net_rx_bytes: GaugeVec,    // labels: group, subgroup
+    pub group_net_tx_bytes: GaugeVec,    // labels: group, subgroup
     pub group_net_connections: GaugeVec, // labels: group, subgroup, proto
 }
 
@@ -345,10 +345,7 @@ impl MemoryMetrics {
             "herakles_system_context_switches",
             "Number of context switches",
         )?;
-        let system_forks = Gauge::new(
-            "herakles_system_forks",
-            "Number of forks since boot",
-        )?;
+        let system_forks = Gauge::new("herakles_system_forks", "Number of forks since boot")?;
         let system_open_fds = GaugeVec::new(
             Opts::new(
                 "herakles_system_open_fds",
@@ -356,8 +353,10 @@ impl MemoryMetrics {
             ),
             &["state"],
         )?;
-        let system_entropy_bytes =
-            Gauge::new("herakles_system_entropy_bytes", "Available entropy in bytes")?;
+        let system_entropy_bytes = Gauge::new(
+            "herakles_system_entropy_bytes",
+            "Available entropy in bytes",
+        )?;
 
         // ========== CPU Group Metrics ==========
         let group_cpu_usage_ratio = GaugeVec::new(
