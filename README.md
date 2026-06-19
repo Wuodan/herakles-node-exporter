@@ -241,7 +241,7 @@ subgroups = [
 `cmdline_matches` is the right tool for JVM-based services where `/proc/<pid>/comm` is always `java` — match on the
 main class or startup script instead.
 
-File search order: `./subgroups.toml` → `/etc/herakles/subgroups.toml`.
+File search order: `./subgroups.toml` → `/etc/herakles-node-exporter/subgroups.toml`.
 
 List loaded subgroups at runtime:
 
@@ -417,7 +417,7 @@ sudo ./binary/herakles-node-exporter install --force
 sudo ./binary/herakles-node-exporter uninstall
 ```
 
-Installation places the binary at `/opt/herakles/bin/`, configuration at `/etc/herakles/`, and the systemd service at `/etc/systemd/system/herakles-node-exporter.service`.
+Installation places the binary at `/opt/herakles/bin/`, configuration at `/etc/herakles-node-exporter/`, and the systemd service at `/etc/systemd/system/herakles-node-exporter.service`.
 
 ### Docker
 
@@ -442,7 +442,7 @@ docker run -d \
 Configuration is loaded from the first file found in this order, then merged with CLI flags (CLI takes precedence):
 
 1. `--config <path>` if specified
-2. `/etc/herakles/node-exporter.yaml` (also `.yml`, `.json`)
+2. `/etc/herakles-node-exporter/config.yaml` (also `.yml`, `.json`)
 3. `./herakles-node-exporter.yaml` (also `.yml`, `.json`)
 
 Use `--no-config` to ignore all config files. Use `--show-config` to print the effective merged configuration.

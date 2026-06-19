@@ -38,7 +38,7 @@ pub fn command_uninstall(skip_confirm: bool) -> Result<(), Box<dyn std::error::E
         println!("⚠️  This will remove:");
         println!("   • systemd service (stopped and disabled)");
         println!("   • Binary: /opt/herakles/bin/herakles-node-exporter");
-        println!("   • Configuration: /etc/herakles/");
+        println!("   • Configuration: /etc/herakles-node-exporter/");
         println!("   • Directories: /opt/herakles/, /var/lib/herakles/, /run/herakles/");
         println!("   • BPF maps: /sys/fs/bpf/herakles/");
         println!("   • Kernel parameter config: /etc/sysctl.d/99-herakles-ebpf.conf");
@@ -175,7 +175,7 @@ fn remove_binary() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Remove configuration directory and files
 fn remove_config() -> Result<(), Box<dyn std::error::Error>> {
-    let config_dir = "/etc/herakles";
+    let config_dir = "/etc/herakles-node-exporter";
 
     if Path::new(config_dir).exists() {
         fs::remove_dir_all(config_dir)?;

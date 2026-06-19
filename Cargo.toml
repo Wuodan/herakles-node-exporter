@@ -5,7 +5,7 @@ description = "Comprehensive Prometheus exporter for Linux system metrics includ
 authors = ["Michael Moll <exporter@herakles.now>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-repository = "https://github.com/cansp-dev/herakles-node-exporter"
+repository = "https://github.com/herakles-now/herakles-node-exporter"
 readme = "README.md"
 keywords = ["prometheus", "exporter", "memory", "metrics", "process"]
 categories = ["command-line-utilities", "monitoring"]
@@ -97,16 +97,17 @@ assets = [
     "755",
   ],
   [
-    "examples/herakles-node-exporter.yaml",
-    "/etc/herakles-node-exporter/",
+    "packaging/node-exporter.yaml",
+    "/etc/herakles-node-exporter/config.yaml",
     "644",
   ],
   [
-    "examples/systemd.service",
-    "/lib/systemd/system/",
+    "packaging/herakles-node-exporter.service",
+    "/lib/systemd/system/herakles-node-exporter.service",
     "644",
   ],
 ]
+conf-files = ["/etc/herakles-node-exporter/config.yaml"]
 extended-description = """\
 Comprehensive Prometheus exporter for Linux system monitoring providing:\
 - Per-process memory metrics (RSS, PSS, USS)\
@@ -116,3 +117,11 @@ Comprehensive Prometheus exporter for Linux system monitoring providing:\
 - Network interface statistics\
 Ideal for containerized environments and detailed system analysis.\
 """
+
+[package.metadata.generate-rpm]
+name = "herakles-node-exporter"
+assets = [
+  { source = "target/release/herakles-node-exporter", dest = "/usr/bin/herakles-node-exporter", mode = "0755" },
+  { source = "packaging/node-exporter.yaml", dest = "/etc/herakles-node-exporter/config.yaml", mode = "0644", config = "noreplace" },
+  { source = "packaging/herakles-node-exporter.service", dest = "/usr/lib/systemd/system/herakles-node-exporter.service", mode = "0644" },
+]

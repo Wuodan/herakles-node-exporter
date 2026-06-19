@@ -159,7 +159,7 @@ Monitor Java applications for heap and metaspace issues.
 **Custom Subgroups:**
 
 ```toml
-# /etc/herakles/subgroups.toml
+# /etc/herakles-node-exporter/subgroups.toml
 subgroups = [
   { group = "java", subgroup = "spring-boot", cmdline_matches = [
     "org.springframework.boot.loader",

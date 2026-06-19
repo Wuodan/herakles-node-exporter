@@ -1,0 +1,33 @@
+[Unit]
+Description=Herakles Node Exporter
+Documentation=https://github.com/herakles-now/herakles-node-exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+SystemCallFilter=@system-service bpf perf_event_open
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+ProtectSystem=strict
+ReadWritePaths=/var/lib/herakles /run/herakles /sys/fs/bpf/herakles
+ReadOnlyPaths=/sys/kernel/debug /sys/kernel/tracing
+ProtectHome=true
+ProtectKernelModules=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+ExecStartPre=/usr/bin/sysctl -q kernel.unprivileged_bpf_disabled=1
+ExecStartPre=/usr/bin/sysctl -q kernel.perf_event_paranoid=2
+ExecStartPre=/usr/bin/mkdir -p /sys/fs/bpf/herakles/node
+ExecStartPre=/usr/bin/chmod 0755 /sys/fs/bpf/herakles
+ExecStartPre=/usr/bin/chmod 0755 /sys/fs/bpf/herakles/node
+ExecStart=/usr/bin/herakles-node-exporter -c /etc/herakles-node-exporter/config.yaml
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

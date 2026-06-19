@@ -109,10 +109,27 @@ sudo apt install ./target/debian/herakles-node-exporter_*.deb
 
 The Debian package installs:
 - `/usr/bin/herakles-node-exporter` - Main binary
-- `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
+- `/etc/herakles-node-exporter/config.yaml` - Config file
 - `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
 
-## Method 4: Docker
+The service unit is installed but not enabled or started automatically.
+
+## Method 4: RPM Package
+
+```bash
+# Install on Fedora/RHEL/Rocky/Alma/openSUSE-class systems
+sudo rpm -i herakles-node-exporter-*.x86_64.rpm
+```
+
+The RPM package installs the same payload as the Debian package:
+
+- `/usr/bin/herakles-node-exporter`
+- `/etc/herakles-node-exporter/config.yaml`
+- `/usr/lib/systemd/system/herakles-node-exporter.service`
+
+The service unit is installed but not enabled or started automatically.
+
+## Method 5: Docker
 
 ### Build Docker Image
 
@@ -150,8 +167,8 @@ docker run -d \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/config.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/config.yaml
+  -v $(pwd)/config.yaml:/etc/herakles-node-exporter/config.yaml:ro \
+  herakles-node-exporter -c /etc/herakles-node-exporter/config.yaml
 
 # With environment variables
 docker run -d \
@@ -162,7 +179,7 @@ docker run -d \
   herakles-node-exporter
 ```
 
-## Method 5: Docker Compose
+## Method 6: Docker Compose
 
 ### Basic Setup
 
@@ -197,8 +214,8 @@ services:
       - "9215:9215"
     volumes:
       - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/config.yaml:ro
-    command: ["-c", "/etc/herakles/config.yaml"]
+      - ./config.yaml:/etc/herakles-node-exporter/config.yaml:ro
+    command: ["-c", "/etc/herakles-node-exporter/config.yaml"]
     restart: unless-stopped
 
   prometheus:
@@ -251,7 +268,7 @@ Wants=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
-ExecStart=/usr/local/bin/herakles-node-exporter -c /etc/herakles/config.yaml
+ExecStart=/usr/local/bin/herakles-node-exporter -c /etc/herakles-node-exporter/config.yaml
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
@@ -279,11 +296,11 @@ EOF
 sudo useradd -r -s /sbin/nologin prometheus
 
 # Create config directory
-sudo mkdir -p /etc/herakles
-sudo chown prometheus:prometheus /etc/herakles
+sudo mkdir -p /etc/herakles-node-exporter
+sudo chown prometheus:prometheus /etc/herakles-node-exporter
 
 # Create minimal config
-sudo tee /etc/herakles/config.yaml << 'EOF'
+sudo tee /etc/herakles-node-exporter/config.yaml << 'EOF'
 port: 9215
 bind: "0.0.0.0"
 cache_ttl: 30

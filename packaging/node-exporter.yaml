@@ -1,0 +1,48 @@
+# Herakles Node Exporter configuration
+port: 9215
+bind: 0.0.0.0
+min_uss_kb: 0
+include_names: null
+exclude_names: null
+parallelism: null
+max_processes: null
+cache_ttl: 30
+io_buffer_kb: 256
+smaps_buffer_kb: 512
+smaps_rollup_buffer_kb: 256
+enable_health: true
+enable_telemetry: true
+enable_default_collectors: true
+enable_pprof: false
+enable_filesystem_collector: true
+enable_thermal_collector: true
+log_level: info
+enable_file_logging: false
+log_file: null
+search_mode: null
+search_groups: null
+search_subgroups: null
+disable_others: false
+top_n_subgroup: 3
+top_n_others: 10
+details_top_n: 5
+enable_rss: true
+enable_pss: true
+enable_uss: true
+enable_cpu: true
+test_data_file: null
+enable_tls: false
+tls_cert_path: null
+tls_key_path: null
+enable_ebpf: true
+enable_ebpf_network: true
+enable_ebpf_disk: true
+enable_tcp_tracking: true
+ringbuffer:
+  max_memory_mb: 15
+  interval_seconds: 30
+  min_entries_per_subgroup: 10
+  max_entries_per_subgroup: 120
+  enable_database: true
+  database_path: /var/lib/herakles/metrics.db
+  retention: 24h

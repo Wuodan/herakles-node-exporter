@@ -84,7 +84,7 @@ pub static SUBGROUPS: Lazy<RwLock<SubgroupsMap>> = Lazy::new(|| {
     load_subgroups_from_str(content, &mut map);
 
     // 2) optional system-wide subgroups
-    load_subgroups_from_file("/etc/herakles/subgroups.toml", &mut map);
+    load_subgroups_from_file("/etc/herakles-node-exporter/subgroups.toml", &mut map);
 
     // 3) optional subgroups in current working directory
     load_subgroups_from_file("./subgroups.toml", &mut map);
@@ -101,7 +101,7 @@ pub fn reload_subgroups() {
     load_subgroups_from_str(content, &mut map);
 
     // 2) optional system-wide subgroups
-    load_subgroups_from_file("/etc/herakles/subgroups.toml", &mut map);
+    load_subgroups_from_file("/etc/herakles-node-exporter/subgroups.toml", &mut map);
 
     // 3) optional subgroups in current working directory
     load_subgroups_from_file("./subgroups.toml", &mut map);

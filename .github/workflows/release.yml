@@ -126,6 +126,19 @@ jobs:
           sha256sum herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-gnu.tar.gz > herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-gnu.tar.gz.sha256
           sha256sum herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz > herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz.sha256
 
+      - name: Build distro packages
+        run: |
+          set -euo pipefail
+          cargo install cargo-deb cargo-generate-rpm
+          mkdir -p target/release
+          cp dist/x86_64-linux-gnu/herakles-node-exporter target/release/herakles-node-exporter
+          cargo deb --no-build
+          cargo generate-rpm
+          cp target/debian/herakles-node-exporter_*.deb herakles-node-exporter-${{ github.ref_name }}-amd64.deb
+          cp target/generate-rpm/herakles-node-exporter-*.x86_64.rpm herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm
+          sha256sum herakles-node-exporter-${{ github.ref_name }}-amd64.deb > herakles-node-exporter-${{ github.ref_name }}-amd64.deb.sha256
+          sha256sum herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm > herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm.sha256
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.2
 
@@ -201,6 +214,24 @@ jobs:
             --bundle "herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz.sigstore.json" \
             "herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz"
 
+      - name: Sign Debian package with Cosign
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          cosign sign-blob \
+            --bundle "herakles-node-exporter-${{ github.ref_name }}-amd64.deb.sigstore.json" \
+            "herakles-node-exporter-${{ github.ref_name }}-amd64.deb"
+
+      - name: Sign RPM package with Cosign
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          cosign sign-blob \
+            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm.sigstore.json" \
+            "herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -230,6 +261,12 @@ jobs:
             herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz
             herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz.sha256
             herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz.sigstore.json
+            herakles-node-exporter-${{ github.ref_name }}-amd64.deb
+            herakles-node-exporter-${{ github.ref_name }}-amd64.deb.sha256
+            herakles-node-exporter-${{ github.ref_name }}-amd64.deb.sigstore.json
+            herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm
+            herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm.sha256
+            herakles-node-exporter-${{ github.ref_name }}-x86_64.rpm.sigstore.json
             install.sh
             provenance/herakles-node-exporter-x86_64-linux-gnu-attestation.jsonl
             provenance/herakles-node-exporter-x86_64-linux-musl-attestation.jsonl
