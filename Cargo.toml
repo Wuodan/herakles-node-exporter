@@ -14,6 +14,8 @@ categories = ["command-line-utilities", "monitoring"]
 default = ["ebpf"]
 # Enable eBPF-based metrics collection
 ebpf = ["libbpf-rs", "libbpf-sys"]
+# Enable eBPF with vendored libelf/zlib for musl/static builds
+ebpf-vendored = ["ebpf", "libbpf-sys/vendored"]
 
 [dependencies]
 axum = { version = "0.8", features = ["http1", "macros", "tokio"] }

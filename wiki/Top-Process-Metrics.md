@@ -259,8 +259,7 @@ rate(herakles_top_blkio_process_write_bytes_total[5m]) / rate(herakles_top_blkio
 
 ## Network Metrics
 
-These metrics require **eBPF support** to be enabled. See the [eBPF
-Configuration](../README.md#-ebpf-configuration-optional-advanced-feature) section for setup requirements.
+These metrics require **eBPF support** to be enabled.
 
 ### herakles_top_net_process_rx_bytes_total
 
