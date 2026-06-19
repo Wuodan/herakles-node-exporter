@@ -107,7 +107,12 @@ jobs:
           cp dist/x86_64-linux-musl/herakles-node-exporter herakles-node-exporter-x86_64-linux-musl
           cp dist/aarch64-linux-gnu/herakles-node-exporter herakles-node-exporter-aarch64-linux-gnu
           cp dist/aarch64-linux-musl/herakles-node-exporter herakles-node-exporter-aarch64-linux-musl
+          sed \
+            -e 's/^REPO_OWNER=.*/REPO_OWNER="${{ github.repository_owner }}"/' \
+            -e 's/^REPO_NAME=.*/REPO_NAME="${{ github.event.repository.name }}"/' \
+            scripts/install.sh > install.sh
           chmod +x herakles-node-exporter-x86_64-linux-gnu herakles-node-exporter-x86_64-linux-musl herakles-node-exporter-aarch64-linux-gnu herakles-node-exporter-aarch64-linux-musl
+          chmod +x install.sh
           tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz herakles-node-exporter-x86_64-linux-gnu
           tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux-musl.tar.gz herakles-node-exporter-x86_64-linux-musl
           tar -czf herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-gnu.tar.gz herakles-node-exporter-aarch64-linux-gnu
@@ -225,6 +230,7 @@ jobs:
             herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz
             herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz.sha256
             herakles-node-exporter-${{ github.ref_name }}-aarch64-linux-musl.tar.gz.sigstore.json
+            install.sh
             provenance/herakles-node-exporter-x86_64-linux-gnu-attestation.jsonl
             provenance/herakles-node-exporter-x86_64-linux-musl-attestation.jsonl
             provenance/herakles-node-exporter-aarch64-linux-gnu-attestation.jsonl

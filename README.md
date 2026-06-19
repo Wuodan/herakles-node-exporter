@@ -26,18 +26,15 @@ The separation is architectural and deliberate. See [Why this architecture?](#wh
 ## Quick Start
 
 ```bash
-# Clone and build (eBPF enabled by default)
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
-cd herakles-node-exporter
-make release
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sh
 
-# Run (root required for full /proc coverage)
-sudo ./binary/herakles-node-exporter
+sudo herakles-node-exporter
 
-# Verify
 curl http://localhost:9215/metrics | grep herakles_group_memory_rss
 curl http://localhost:9215/html/details
 ```
+
+Manual installation instructions are in [wiki/Installation.md](wiki/Installation.md).
 
 Prometheus scrape config:
 
