@@ -14,6 +14,8 @@ categories = ["command-line-utilities", "monitoring"]
 default = ["ebpf"]
 # Enable eBPF-based metrics collection
 ebpf = ["libbpf-rs", "libbpf-sys"]
+# Enable eBPF with vendored libelf/zlib for musl/static builds
+ebpf-vendored = ["ebpf", "libbpf-sys/vendored"]
 # Enable actix-web health server example
 health-actix = ["actix-web"]
 
@@ -56,23 +58,16 @@ actix-web = { version = "4", optional = true }
 
 # TLS support
 axum-server = { version = "0.8", features = ["tls-rustls"] }
-tokio-rustls = "0.26"
 
 # eBPF support (optional - feature gated)
 libbpf-rs = { version = "0.26", optional = true }
 libbpf-sys = { version = "1.4", optional = true }
-regex = "1.10"
 
 # System user/group management for install command
 nix = { version = "0.31", features = ["user", "process", "fs"] }
 
-# Error handling derive macros
-thiserror = "2.0"
-
-
 [build-dependencies]
 vergen = { version = "8.0", features = ["build", "git", "gitcl"] }
-which = "8.0"
 
 [profile.dev]
 opt-level = 0

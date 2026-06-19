@@ -1,11 +1,15 @@
-name: Build and Test eBPF Binary
-description: Set up toolchain with dependencies, run tests, build the binary with eBPF support and test the binary.
+name: Build and Test Binary
+description: Set up toolchain with dependencies, run tests, build the binary, and validate Prometheus metrics output.
 
 inputs:
   rust-target:
     description: Rust target to install for the build.
     required: false
     default: x86_64-unknown-linux-gnu
+  binary-path:
+    description: Path to the built exporter binary to validate.
+    required: false
+    default: ./target/x86_64-unknown-linux-gnu/release/herakles-node-exporter
 
 runs:
   using: composite
@@ -27,13 +31,112 @@ runs:
           clang \
           libelf-dev
 
+    - name: Configure musl eBPF build dependencies
+      if: contains(inputs.rust-target, '-musl')
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get install -y \
+          autoconf \
+          automake \
+          autopoint \
+          bison \
+          flex \
+          gawk \
+          git \
+          libtool \
+          libtool-bin \
+          linux-libc-dev \
+          musl-tools
+
+        case "${{ inputs.rust-target }}" in
+          x86_64-unknown-linux-musl)
+            target_include="/usr/include/x86_64-linux-gnu"
+            cc_env="CC_x86_64_unknown_linux_musl"
+            linker_env="CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER"
+            extra_link_lib=""
+            ;;
+          aarch64-unknown-linux-musl)
+            target_include="/usr/include/aarch64-linux-gnu"
+            cc_env="CC_aarch64_unknown_linux_musl"
+            linker_env="CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER"
+            extra_link_libs="-latomic -lgcc"
+            ;;
+          *)
+            echo "unsupported musl target: ${{ inputs.rust-target }}" >&2
+            exit 1
+            ;;
+        esac
+
+        : "${extra_link_libs:=}"
+
+        compat_root="$(mktemp -d)"
+        compat_prefix="${compat_root}/prefix"
+        mkdir -p "${compat_prefix}"
+
+        git -C "${compat_root}" clone --depth=1 --branch 1.4.1 https://github.com/ericonr/argp-standalone.git
+        (
+          cd "${compat_root}/argp-standalone"
+          autoreconf -fi
+          CC=musl-gcc ./configure --prefix="${compat_prefix}"
+          make -j"$(nproc)"
+          install -D argp.h "${compat_prefix}/include/argp.h"
+          install -D libargp.a "${compat_prefix}/lib/libargp.a"
+        )
+
+        git -C "${compat_root}" clone --depth=1 --branch v1.2.3 https://github.com/void-linux/musl-obstack.git
+        (
+          cd "${compat_root}/musl-obstack"
+          ./bootstrap.sh
+          CC=musl-gcc ./configure --prefix="${compat_prefix}"
+          make -j"$(nproc)"
+          make install
+        )
+
+        git -C "${compat_root}" clone --depth=1 --branch v1.2.7 https://github.com/void-linux/musl-fts.git
+        (
+          cd "${compat_root}/musl-fts"
+          ./bootstrap.sh
+          CC=musl-gcc ./configure --prefix="${compat_prefix}"
+          make -j"$(nproc)"
+          make install
+        )
+
+        wrapper="${compat_root}/musl-compat-cc"
+        cat > "${wrapper}" <<EOF
+        #!/usr/bin/env bash
+        extra_link_libs="${extra_link_libs}"
+        if [ -n "\${extra_link_libs}" ]; then
+          for arg in "\$@"; do
+            if [ "\${arg}" = "-c" ]; then
+              exec musl-gcc -I${compat_prefix}/include -idirafter /usr/include -idirafter ${target_include} -L${compat_prefix}/lib "\$@"
+            fi
+          done
+        fi
+        exec musl-gcc -I${compat_prefix}/include -idirafter /usr/include -idirafter ${target_include} -L${compat_prefix}/lib "\$@" \${extra_link_libs}
+        EOF
+        chmod +x "${wrapper}"
+
+        echo "BUILD_FEATURES=ebpf-vendored" >> "$GITHUB_ENV"
+        echo "${cc_env}=${wrapper}" >> "$GITHUB_ENV"
+        echo "${linker_env}=${wrapper}" >> "$GITHUB_ENV"
+        echo "LIBBPF_SYS_EXTRA_CFLAGS=-I${compat_prefix}/include -idirafter /usr/include -idirafter ${target_include}" >> "$GITHUB_ENV"
+        echo "LIBBPF_SYS_LIBRARY_PATH=${compat_prefix}/lib" >> "$GITHUB_ENV"
+
+    - name: Configure native build features
+      if: ${{ !contains(inputs.rust-target, '-musl') }}
+      shell: bash
+      run: echo "BUILD_FEATURES=ebpf" >> "$GITHUB_ENV"
+
     - name: Run tests
       shell: bash
-      run: cargo test
+      run: cargo test --no-default-features --features "${BUILD_FEATURES}" --target "${{ inputs.rust-target }}"
 
     - name: Build with eBPF
       shell: bash
-      run: cargo build --release --features ebpf
+      run: cargo build --release --no-default-features --features "${BUILD_FEATURES}" --target "${{ inputs.rust-target }}"
 
     - name: Run binary and validate its Prometheus metrics format
       uses: ./.github/actions/validate-prometheus-metrics
+      with:
+        binary-path: ${{ inputs.binary-path }}
