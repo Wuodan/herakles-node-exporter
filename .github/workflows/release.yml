@@ -29,6 +29,10 @@ jobs:
       contents: write
       attestations: write
       id-token: write
+    env:
+      EXTRA_BUNDLES: >-
+        install.sh
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -60,6 +64,20 @@ jobs:
             chmod +x "release/herakles-node-exporter-${target}"
           done
 
+      - name: Package install.sh
+        run: |
+          set -euo pipefail
+          cp scripts/install.sh release/install.sh
+          sed -i \
+            -e 's/^REPO_OWNER=.*/REPO_OWNER="${{ github.repository_owner }}"/' \
+            -e 's/^REPO_NAME=.*/REPO_NAME="${{ github.event.repository.name }}"/' \
+            release/install.sh
+
+      - name: Generate provenance attestation for install.sh
+        uses: actions/attest@v4
+        with:
+          subject-path: release/install.sh
+
       - name: Export provenance
         env:
           GH_TOKEN: ${{ github.token }}
@@ -71,6 +89,12 @@ jobs:
           # Export provenance for binaries
           for target in $(jq -r 'keys[]' release-shas.json); do
             bundle="herakles-node-exporter-${target}"
+            scripts/download-attestation-bundle.sh \
+              "release/${bundle}" \
+              "release/provenance/${bundle}.attestation.jsonl"
+          done
+          # Export provenance for install.sh
+          for bundle in ${EXTRA_BUNDLES}; do
             scripts/download-attestation-bundle.sh \
               "release/${bundle}" \
               "release/provenance/${bundle}.attestation.jsonl"
@@ -89,6 +113,12 @@ jobs:
           # Sign binaries
           for target in $(jq -r 'keys[]' ../release-shas.json); do
             bundle="herakles-node-exporter-${target}"
+            cosign sign-blob \
+              --bundle "signature/${bundle}.sigstore.json" \
+              "${bundle}"
+          done
+          # Sign install.sh
+          for bundle in ${EXTRA_BUNDLES}; do
             cosign sign-blob \
               --bundle "signature/${bundle}.sigstore.json" \
               "${bundle}"
@@ -115,6 +145,7 @@ jobs:
           generate_release_notes: true
           files: |
             herakles-node-exporter*
+            install.sh
             provenance/*.jsonl
             signature/*.json
             SHA256SUMS
