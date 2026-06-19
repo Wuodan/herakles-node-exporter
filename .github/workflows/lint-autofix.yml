@@ -1,6 +1,9 @@
 name: Lint Autofix
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "19 4 * * 1"
   workflow_dispatch:
@@ -176,8 +179,36 @@ jobs:
           branch: lint-autofix/${{ github.ref_name }}
           delete-branch: true
           commit-message: "Apply lint autofixes"
-          title: "Apply lint autofixes"
+          title: "Apply lint autofixes for ${{ github.ref_name }}"
           body-path: ${{ steps.pr_body.outputs.body_file }}
+
+      - name: Close stale autofix PR
+        if: always() && steps.changes.outputs.has_changes != 'true' && env.AUTOFIX_MODE == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTOFIX_BRANCH: lint-autofix/${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          pr_number="$(
+            gh pr list \
+              --repo "${{ github.repository }}" \
+              --head "${AUTOFIX_BRANCH}" \
+              --base "${{ github.ref_name }}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+
+          if [[ -z "${pr_number}" ]]; then
+            echo "No open autofix PR to close for ${AUTOFIX_BRANCH}."
+            exit 0
+          fi
+
+          gh pr close "${pr_number}" \
+            --repo "${{ github.repository }}" \
+            --delete-branch \
+            --comment "Closing stale autofix PR because the latest lint-autofix run produced no changes."
 
       - name: Report no changes
         if: always() && steps.changes.outputs.has_changes != 'true'
