@@ -15,7 +15,36 @@ This guide covers all installation methods for the Herakles Process Memory Expor
 herakles-node-exporter check --all
 ```
 
-## Method 1: From Source
+## Method 1: Install Release Binary
+
+### One-Line Installer
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sudo sh
+```
+
+Specific version:
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | \
+  sudo sh -s -- --version <version>
+```
+
+### Manual Binary Install
+
+Download the matching binary from the release page and install it directly.
+
+Example:
+
+```bash
+curl -fL -o herakles-node-exporter \
+  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-x86_64-linux-gnu
+chmod +x herakles-node-exporter
+sudo install -m 0755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
+herakles-node-exporter --version
+```
+
+## Method 2: From Source
 
 ### Release Build
 
@@ -50,7 +79,7 @@ cargo run -- --help
 cargo run -- -p 9215 --log-level debug
 ```
 
-## Method 2: Docker
+## Method 3: Docker
 
 ### Build Docker Image
 
@@ -100,7 +129,7 @@ docker run -d \
   herakles-node-exporter
 ```
 
-## Method 3: Docker Compose
+## Method 4: Docker Compose
 
 ### Basic Setup
 
