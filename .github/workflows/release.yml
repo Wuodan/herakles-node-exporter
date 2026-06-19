@@ -87,11 +87,20 @@ jobs:
               "herakles-node-exporter-${target}"
           done
 
+      - name: Package install.sh
+        run: |
+          set -euo pipefail
+          cp scripts/install.sh release/install.sh
+          sed -i \
+            -e 's/^REPO_OWNER=.*/REPO_OWNER="${{ github.repository_owner }}"/' \
+            -e 's/^REPO_NAME=.*/REPO_NAME="${{ github.event.repository.name }}"/' \
+            release/install.sh
+
       - name: Package SHA256SUMS
         run: |
           set -euo pipefail
           cd release
-          sha256sum herakles-node-exporter* > SHA256SUMS
+          sha256sum herakles-node-exporter* install.sh > SHA256SUMS
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -100,5 +109,6 @@ jobs:
           generate_release_notes: true
           files: |
             herakles-node-exporter*
+            install.sh
             provenance/*.jsonl
             SHA256SUMS
