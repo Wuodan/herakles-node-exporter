@@ -93,9 +93,9 @@ pub struct MemoryMetrics {
     pub group_memory_swap_bytes: GaugeVec, // labels: group, subgroup
 
     // ========== Block I/O Group Metrics ==========
-    pub group_blkio_read_bytes: GaugeVec,     // labels: group, subgroup
-    pub group_blkio_write_bytes: GaugeVec,    // labels: group, subgroup
-    pub group_blkio_read_syscalls: GaugeVec,  // labels: group, subgroup
+    pub group_blkio_read_bytes: GaugeVec, // labels: group, subgroup
+    pub group_blkio_write_bytes: GaugeVec, // labels: group, subgroup
+    pub group_blkio_read_syscalls: GaugeVec, // labels: group, subgroup
     pub group_blkio_write_syscalls: GaugeVec, // labels: group, subgroup
 
     // ========== Network Group Metrics ==========
