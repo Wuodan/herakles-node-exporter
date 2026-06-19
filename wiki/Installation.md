@@ -5,22 +5,14 @@ This guide covers all installation methods for the Herakles Process Memory Expor
 ## Prerequisites
 
 - **Linux**: Kernel 4.14+ recommended (for `smaps_rollup` support)
-- **Rust**: 1.70+ (for building from source)
 - **Permissions**: Read access to `/proc` filesystem
 
-### Check System Requirements
-
-```bash
-# After installation, verify system compatibility
-herakles-node-exporter check --all
-```
-
-## Method 1: Install Release Binary
-
-### One-Line Installer
+## Release Binary Install
 
 ```bash
 curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sh
+sudo herakles-node-exporter install
+curl -f http://localhost:9215/health
 ```
 
 Specific version:
@@ -30,11 +22,9 @@ curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/lates
   sh -s -- --version v0.1.1-alpha6
 ```
 
-### Manual Binary Install
+## Manual Binary Install
 
-Download the matching binary from the release page and install it directly.
-
-Example:
+Download the release binary for your platform and install it into your `PATH`.
 
 ```bash
 curl -fL -o herakles-node-exporter \
@@ -44,122 +34,84 @@ sudo install -m 0755 herakles-node-exporter /usr/local/bin/herakles-node-exporte
 herakles-node-exporter --version
 ```
 
-## Method 2: From Source
+## System-Wide Installation
 
-### Release Build
+The built-in installer copies the binary, writes the default config, installs the systemd unit, starts the service,
+and applies the eBPF sysctl defaults.
+
+```bash
+sudo herakles-node-exporter install
+```
+
+Useful flags:
+
+```bash
+sudo herakles-node-exporter install --no-service
+sudo herakles-node-exporter install --force
+sudo herakles-node-exporter uninstall
+```
+
+## System Check
+
+Run after installation:
+
+```bash
+herakles-node-exporter check --all
+```
+
+## From Source
+
+### Prerequisites
+
+- **Rust**: 1.70+ (for building from source)
+  - `cargo`, `clang`, `llvm`, `bpftool`, and kernel BTF data if you build with eBPF enabled
+
+### Build And Install
 
 ```bash
 # Clone the repository
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
+git clone https://github.com/herakles-now/herakles-node-exporter.git
 cd herakles-node-exporter
 
 # Build optimized release binary
 cargo build --release
 
-# The binary is located at:
-ls -la target/release/herakles-node-exporter
-
 # Install system-wide
-sudo cp target/release/herakles-node-exporter /usr/local/bin/
-sudo chmod +x /usr/local/bin/herakles-node-exporter
-
-# Verify installation
-herakles-node-exporter --version
+sudo install -m 0755 target/release/herakles-node-exporter /usr/local/bin/herakles-node-exporter
 ```
 
-### Development Build
+## Docker
+
+Copy the `musl` binaries from the 
+[latest release](https://github.com/herakles-now/herakles-node-exporter/releases/latest) to `./herakles-node-exporter`
+or build them from source.
+
+### Build `musl` Binaries
+
+On an **amd64** host, use:
 
 ```bash
-# Build with debug symbols
-cargo build
-
-# Run directly from source
-cargo run -- --help
-
-# Run with specific options
-cargo run -- -p 9215 --log-level debug
+cargo build --release --target x86_64-unknown-linux-musl
+cp target/x86_64-unknown-linux-musl/release/herakles-node-exporter ./herakles-node-exporter
 ```
 
-## Method 3: Debian/Ubuntu Package
-
-### Build the Package
+On an **arm64** host, use:
 
 ```bash
-# Install cargo-deb if not present
-cargo install cargo-deb
-
-# Build .deb package
-cargo deb
-
-# The package is created at:
-ls -la target/debian/herakles-node-exporter_*.deb
+cargo build --release --target aarch64-unknown-linux-musl
+cp target/aarch64-unknown-linux-musl/release/herakles-node-exporter ./herakles-node-exporter
 ```
 
-### Install the Package
+### Build And Run Docker Image
 
 ```bash
-# Install the .deb package
-sudo dpkg -i target/debian/herakles-node-exporter_*.deb
-
-# Or with apt (handles dependencies)
-sudo apt install ./target/debian/herakles-node-exporter_*.deb
-```
-
-### Package Contents
-
-The Debian package installs:
-- `/usr/bin/herakles-node-exporter` - Main binary
-- `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
-- `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
-
-## Method 4: Docker
-
-### Build Docker Image
-
-```dockerfile
-# Dockerfile
-FROM rust:1.75-slim as builder
-
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/herakles-node-exporter /usr/local/bin/
-EXPOSE 9215
-ENTRYPOINT ["herakles-node-exporter"]
-```
-
-```bash
-# Build the image
 docker build -t herakles-node-exporter:latest .
-```
-
-### Run Container
-
-```bash
-# Basic run (requires /proc access)
 docker run -d \
-  --name herakles-exporter \
+  --name herakles-node-exporter \
+  --pid=host \
+  -v /proc:/proc:ro \
   -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  herakles-node-exporter
-
-# With custom config
-docker run -d \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/config.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/config.yaml
-
-# With environment variables
-docker run -d \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -e RUST_LOG=info \
-  herakles-node-exporter
+  herakles-node-exporter:latest
 ```
 
 ## Method 5: Docker Compose
@@ -243,7 +195,7 @@ volumes:
 sudo tee /etc/systemd/system/herakles-node-exporter.service << 'EOF'
 [Unit]
 Description=Herakles Process Memory Exporter
-Documentation=https://github.com/cansp-dev/herakles-node-exporter
+Documentation=https://github.com/herakles-now/herakles-node-exporter
 After=network-online.target
 Wants=network-online.target
 
@@ -310,7 +262,8 @@ herakles-node-exporter check --all
 ```
 
 Expected output:
-```
+
+```text
 🔍 Herakles Process Memory Exporter - System Check
 ===================================================
 
@@ -404,4 +357,4 @@ uname -r
 
 ## 🔗 Project & Support
 
-Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>
+Project: <https://github.com/herakles-now/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>

@@ -28,10 +28,9 @@ The separation is architectural and deliberate. See [Why this architecture?](#wh
 ```bash
 curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sh
 
-sudo herakles-node-exporter
+sudo herakles-node-exporter install
 
-curl http://localhost:9215/metrics | grep herakles_group_memory_rss
-curl http://localhost:9215/html/details
+curl -f http://localhost:9215/health
 ```
 
 Manual installation instructions are in [wiki/Installation.md](wiki/Installation.md).
@@ -383,57 +382,7 @@ Always registered. Only updated when the `ebpf` feature is compiled in and eBPF 
 
 ## Installation
 
-### Build
-
-The `ebpf` feature is enabled by default. Building with eBPF requires `clang`, `bpftool`, and a kernel with BTF
-support (`/sys/kernel/btf/vmlinux`).
-
-```bash
-# Install build dependencies (Debian/Ubuntu)
-sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r) bpftool
-
-# Release build with eBPF
-make release
-
-# Release build without eBPF (smaller binary, no clang/bpftool dependency)
-make release CARGOFLAGS='--no-default-features'
-
-# Binary lands in binary/herakles-node-exporter regardless of build profile
-```
-
-### System-wide installation
-
-```bash
-# Install binary + systemd service (requires root)
-sudo ./binary/herakles-node-exporter install
-
-# Install without starting the service
-sudo ./binary/herakles-node-exporter install --no-service
-
-# Force reinstall over existing installation
-sudo ./binary/herakles-node-exporter install --force
-
-# Uninstall
-sudo ./binary/herakles-node-exporter uninstall
-```
-
-Installation places the binary at `/opt/herakles/bin/`, configuration at `/etc/herakles/`, and the systemd service at `/etc/systemd/system/herakles-node-exporter.service`.
-
-### Docker
-
-The image expects a pre-built statically linked musl binary and runs as the `herakles` user (uid=1000). `--pid=host`
-and a `/proc` bind-mount are required for full host monitoring.
-
-```bash
-docker build -t herakles-node-exporter:latest .
-
-docker run -d \
-  --name herakles-node-exporter \
-  --pid=host \
-  -v /proc:/proc:ro \
-  -p 9215:9215 \
-  herakles-node-exporter:latest
-```
+See [wiki/Installation.md](wiki/Installation.md).
 
 ---
 
@@ -442,7 +391,7 @@ docker run -d \
 Configuration is loaded from the first file found in this order, then merged with CLI flags (CLI takes precedence):
 
 1. `--config <path>` if specified
-2. `/etc/herakles/node-exporter.yaml` (also `.yml`, `.json`)
+2. `/etc/herakles-node-exporter/config.yaml` (also `.yml`, `.json`)
 3. `./herakles-node-exporter.yaml` (also `.yml`, `.json`)
 
 Use `--no-config` to ignore all config files. Use `--show-config` to print the effective merged configuration.
@@ -503,8 +452,8 @@ enable_tcp_tracking: true
 
 # TLS (disabled by default)
 enable_tls: false
-# tls_cert_path: "/etc/herakles/cert.pem"
-# tls_key_path: "/etc/herakles/key.pem"
+# tls_cert_path: "/etc/herakles-node-exporter/cert.pem"
+# tls_key_path: "/etc/herakles-node-exporter/key.pem"
 
 log_level: "info"
 ```
