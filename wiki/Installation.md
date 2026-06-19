@@ -15,7 +15,36 @@ This guide covers all installation methods for the Herakles Process Memory Expor
 herakles-node-exporter check --all
 ```
 
-## Method 1: From Source
+## Method 1: Install Release Binary
+
+### One-Line Installer
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sh
+```
+
+Specific version:
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | \
+  sh -s -- --version v0.1.1-alpha6
+```
+
+### Manual Binary Install
+
+Download the matching binary from the release page and install it directly.
+
+Example:
+
+```bash
+curl -fL -o herakles-node-exporter \
+  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-x86_64-linux-gnu
+chmod +x herakles-node-exporter
+sudo install -m 0755 herakles-node-exporter /usr/local/bin/herakles-node-exporter
+herakles-node-exporter --version
+```
+
+## Method 2: From Source
 
 ### Release Build
 
@@ -51,7 +80,7 @@ cargo run -- --help
 cargo run -- -p 9215 --log-level debug
 ```
 
-## Method 2: Debian/Ubuntu Package
+## Method 3: Debian/Ubuntu Package
 
 ### Build the Package
 
@@ -83,7 +112,7 @@ The Debian package installs:
 - `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
 - `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
 
-## Method 3: Docker
+## Method 4: Docker
 
 ### Build Docker Image
 
@@ -133,7 +162,7 @@ docker run -d \
   herakles-node-exporter
 ```
 
-## Method 4: Docker Compose
+## Method 5: Docker Compose
 
 ### Basic Setup
 
