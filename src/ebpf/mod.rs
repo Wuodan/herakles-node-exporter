@@ -128,10 +128,7 @@ impl EbpfManager {
     #[cfg(feature = "ebpf")]
     fn try_init_ebpf() -> Result<EbpfInner, anyhow::Error> {
         // Load eBPF object from embedded bytes (compiled at build time)
-        const EBPF_OBJECT: &[u8] = include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/ebpf/bpf/process_io.bpf.o"
-        ));
+        const EBPF_OBJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/process_io.bpf.o"));
 
         let mut builder = ObjectBuilder::default();
         builder.debug(cfg!(debug_assertions));
