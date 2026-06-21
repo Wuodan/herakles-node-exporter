@@ -1,0 +1,107 @@
+name: Validate Prometheus Metrics
+description: Start the exporter, fetch /metrics, and validate Prometheus scrape format with promtool.
+
+inputs:
+  prom-version:
+    description: Prometheus version to install for promtool validation.
+    required: false
+    default: "3.12.0"
+  prom-linux-amd64-sha256:
+    description: SHA-256 for the Prometheus linux-amd64 release tarball.
+    required: false
+    default: "20da47f8e5303f74aecb78edd7f7e39041dac08ac4939dba75efd7a900ae8867"
+  prom-linux-arm64-sha256:
+    description: SHA-256 for the Prometheus linux-arm64 release tarball.
+    required: false
+    default: "281492bf04ed171cb09d24377e9777f56e55ccb6445ef197b66bd1693bd9b7f1"
+  port:
+    description: HTTP port the exporter should be scraped on.
+    required: false
+    default: "9215"
+  binary-path:
+    description: Path to the exporter binary to start.
+    required: false
+    default: ./target/release/herakles-node-exporter
+
+runs:
+  using: composite
+  steps:
+    - name: Install promtool from Prometheus
+      shell: bash
+      run: |
+        set -euo pipefail
+        PROM_VERSION="${{ inputs.prom-version }}"
+
+        case "$(uname -m)" in
+          x86_64)
+            ARCH="amd64"
+            EXPECTED_SHA256="${{ inputs.prom-linux-amd64-sha256 }}"
+            ;;
+          aarch64|arm64)
+            ARCH="arm64"
+            EXPECTED_SHA256="${{ inputs.prom-linux-arm64-sha256 }}"
+            ;;
+          *)
+            echo "Unsupported architecture: $(uname -m)"
+            exit 1
+            ;;
+        esac
+
+        PROM_TARBALL="prometheus-${PROM_VERSION}.linux-${ARCH}.tar.gz"
+        PROM_URL="https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/${PROM_TARBALL}"
+
+        curl -fsSLo "${PROM_TARBALL}" "${PROM_URL}"
+        printf '%s  %s\n' "${EXPECTED_SHA256}" "${PROM_TARBALL}" | sha256sum -c -
+        tar -xzf "${PROM_TARBALL}"
+
+        sudo install -m 755 \
+          "prometheus-${PROM_VERSION}.linux-${ARCH}/promtool" \
+          /usr/local/bin/promtool
+
+        promtool --version
+
+    - name: Capture metrics output
+      shell: bash
+      run: |
+        set -euo pipefail
+        # create unique temp dir for log file
+        temp_dir="$(mktemp -d)"
+        log_file="${temp_dir}/herakles-node-exporter.log"
+        metrics_file="${temp_dir}/herakles.metrics"
+
+        # run binary and write output to log file
+        "${{ inputs.binary-path }}" > "${log_file}" 2>&1 &
+        EXPORTER_PID=$!
+        trap 'kill "$EXPORTER_PID" 2>/dev/null || true; wait "$EXPORTER_PID" 2>/dev/null || true' EXIT
+
+        # wait for port to be ready
+        for _ in $(seq 1 30); do
+          if curl -fsS "http://127.0.0.1:${{ inputs.port }}/metrics" > "${metrics_file}"; then
+            break
+          fi
+          sleep 1
+        done
+        # validate port became ready
+        test -s "${metrics_file}" || {
+          echo "metrics endpoint did not become ready on port ${{ inputs.port }}"
+          tail -n 40 "${log_file}" || true
+          exit 1
+        }
+        # cleanup: kill process
+        kill "$EXPORTER_PID"
+        wait "$EXPORTER_PID" 2>/dev/null || true
+        trap - EXIT
+
+        # Write paths to job env vars for later steps
+        echo "HERAKLES_NODE_EXPORTER_LOG_FILE=${log_file}" >> "$GITHUB_ENV"
+        echo "HERAKLES_NODE_EXPORTER_METRICS_FILE=${metrics_file}" >> "$GITHUB_ENV"
+
+    - name: Validate metrics output
+      shell: bash
+      run: |
+        set -euo pipefail
+        # validate scraped metrics format and show exporter logs on failure
+        promtool check metrics < "${HERAKLES_NODE_EXPORTER_METRICS_FILE}" || {
+          tail -n 40 "${HERAKLES_NODE_EXPORTER_LOG_FILE}" || true
+          exit 1
+        }

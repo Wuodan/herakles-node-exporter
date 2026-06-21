@@ -548,7 +548,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_disk_read_bytes_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_disk_read_bytes{instance=\"$instance\"}[5m])",
           "legendFormat": "{{device}} (Read)",
           "refId": "A"
         },
@@ -558,7 +558,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_disk_write_bytes_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_disk_write_bytes{instance=\"$instance\"}[5m])",
           "legendFormat": "{{device}} (Write)",
           "refId": "B"
         }
@@ -638,7 +638,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_net_rx_bytes_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_net_rx_bytes{instance=\"$instance\"}[5m])",
           "legendFormat": "{{iface}} (RX)",
           "refId": "A"
         },
@@ -648,7 +648,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_net_tx_bytes_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_net_tx_bytes{instance=\"$instance\"}[5m])",
           "legendFormat": "{{iface}} (TX)",
           "refId": "B"
         }
@@ -912,7 +912,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by(subgroup) (rate(herakles_group_net_rx_bytes_total{instance=\"$instance\"}[5m]))",
+          "expr": "sum by(subgroup) (rate(herakles_group_net_rx_bytes{instance=\"$instance\"}[5m]))",
           "legendFormat": "{{subgroup}} (RX)",
           "refId": "A"
         },
@@ -922,7 +922,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by(subgroup) (rate(herakles_group_net_tx_bytes_total{instance=\"$instance\"}[5m]))",
+          "expr": "sum by(subgroup) (rate(herakles_group_net_tx_bytes{instance=\"$instance\"}[5m]))",
           "legendFormat": "{{subgroup}} (TX)",
           "refId": "B"
         }
@@ -1002,7 +1002,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by(subgroup) (rate(herakles_group_blkio_read_bytes_total{instance=\"$instance\"}[5m]))",
+          "expr": "sum by(subgroup) (rate(herakles_group_blkio_read_bytes{instance=\"$instance\"}[5m]))",
           "legendFormat": "{{subgroup}} (Read)",
           "refId": "A"
         },
@@ -1012,7 +1012,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by(subgroup) (rate(herakles_group_blkio_write_bytes_total{instance=\"$instance\"}[5m]))",
+          "expr": "sum by(subgroup) (rate(herakles_group_blkio_write_bytes{instance=\"$instance\"}[5m]))",
           "legendFormat": "{{subgroup}} (Write)",
           "refId": "B"
         }
@@ -1104,7 +1104,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_cpu_psi_wait_seconds_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_cpu_psi_wait_seconds{instance=\"$instance\"}[5m])",
           "legendFormat": "CPU Pressure",
           "refId": "A"
         },
@@ -1114,7 +1114,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_memory_psi_wait_seconds_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_memory_psi_wait_seconds{instance=\"$instance\"}[5m])",
           "legendFormat": "Memory Pressure",
           "refId": "B"
         },
@@ -1124,7 +1124,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(herakles_system_disk_psi_wait_seconds_total{instance=\"$instance\"}[5m])",
+          "expr": "rate(herakles_system_disk_psi_wait_seconds{instance=\"$instance\"}[5m])",
           "legendFormat": "Disk Pressure",
           "refId": "C"
         }
@@ -1196,7 +1196,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "herakles_exporter_processes_total{instance=\"$instance\"}",
+          "expr": "herakles_exporter_processes{instance=\"$instance\"}",
           "instant": true,
           "legendFormat": "",
           "range": false,
