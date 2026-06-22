@@ -445,7 +445,7 @@ docker run -d \
 Configuration is loaded from the first file found in this order, then merged with CLI flags (CLI takes precedence):
 
 1. `--config <path>` if specified
-2. `/etc/herakles/node-exporter.yaml` (also `.yml`, `.json`)
+2. `/etc/herakles/herakles-node-exporter.yaml` (also `.yml`, `.json`)
 3. `./herakles-node-exporter.yaml` (also `.yml`, `.json`)
 
 Use `--no-config` to ignore all config files. Use `--show-config` to print the effective merged configuration.

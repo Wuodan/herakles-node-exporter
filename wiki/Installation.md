@@ -88,8 +88,8 @@ docker run -d \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/config.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/config.yaml
+  -v $(pwd)/config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro \
+  herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 
 # With environment variables
 docker run -d \
@@ -135,8 +135,8 @@ services:
       - "9215:9215"
     volumes:
       - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/config.yaml:ro
-    command: ["-c", "/etc/herakles/config.yaml"]
+      - ./config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro
+    command: ["-c", "/etc/herakles/herakles-node-exporter.yaml"]
     restart: unless-stopped
 
   prometheus:
@@ -189,7 +189,7 @@ Wants=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
-ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/config.yaml
+ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
@@ -221,7 +221,7 @@ sudo mkdir -p /etc/herakles
 sudo chown prometheus:prometheus /etc/herakles
 
 # Create minimal config
-sudo tee /etc/herakles/config.yaml << 'EOF'
+sudo tee /etc/herakles/herakles-node-exporter.yaml << 'EOF'
 port: 9215
 bind: "0.0.0.0"
 cache_ttl: 30
