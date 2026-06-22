@@ -36,7 +36,7 @@ sudo cp target/release/herakles-node-exporter /opt/herakles/bin/
 ### 2. Create Configuration
 
 ```yaml
-# /etc/herakles/config.yaml
+# /etc/herakles/herakles-node-exporter.yaml
 port: 9215
 bind: "0.0.0.0"
 cache_ttl: 30
@@ -56,7 +56,7 @@ top_n_others: 10
 ### 3. Start the Exporter
 
 ```bash
-herakles-node-exporter -c /etc/herakles/config.yaml
+herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 ```
 
 ### 4. Configure Prometheus
