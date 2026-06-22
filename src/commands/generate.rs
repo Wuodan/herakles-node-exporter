@@ -4,7 +4,7 @@
 
 use ahash::AHashMap as HashMap;
 use chrono::Utc;
-use rand::Rng;
+use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
