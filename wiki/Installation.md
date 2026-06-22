@@ -31,8 +31,7 @@ cargo build --release
 ls -la target/release/herakles-node-exporter
 
 # Install system-wide
-sudo cp target/release/herakles-node-exporter /usr/local/bin/
-sudo chmod +x /usr/local/bin/herakles-node-exporter
+sudo install -m 0755 target/release/herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
 
 # Verify installation
 herakles-node-exporter --version
@@ -64,7 +63,7 @@ COPY . .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/herakles-node-exporter /usr/local/bin/
+COPY --from=builder /app/target/release/herakles-node-exporter /opt/herakles/bin/
 EXPOSE 9215
 ENTRYPOINT ["herakles-node-exporter"]
 ```
@@ -190,7 +189,7 @@ Wants=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
-ExecStart=/usr/local/bin/herakles-node-exporter -c /etc/herakles/config.yaml
+ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/config.yaml
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
@@ -301,7 +300,7 @@ curl http://localhost:9215/health
 ```bash
 # Error: Permission denied reading /proc/*/smaps
 # Solution: Run with appropriate capabilities
-sudo setcap cap_dac_read_search+ep /usr/local/bin/herakles-node-exporter
+sudo setcap cap_dac_read_search+ep /opt/herakles/bin/herakles-node-exporter
 ```
 
 ### Port Already in Use
