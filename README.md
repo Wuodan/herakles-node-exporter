@@ -748,7 +748,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/herakles-node-exporter
+ExecStart=/opt/herakles/bin/herakles-node-exporter
 Restart=on-failure
 RestartSec=5s
 ProtectSystem=strict

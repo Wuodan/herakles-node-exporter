@@ -30,7 +30,7 @@ installation, configuration, and usage of the exporter.
 git clone https://github.com/herakles-now/herakles-node-exporter.git
 cd herakles-node-exporter
 cargo build --release
-sudo cp target/release/herakles-node-exporter /usr/local/bin/
+sudo cp target/release/herakles-node-exporter /opt/herakles/bin/
 ```
 
 ### 2. Create Configuration
