@@ -61,7 +61,7 @@ Config file locations (in order):
 1. CLI specified: -c /path/to/config.yaml
 2. Current directory: ./herakles-node-exporter.yaml
 3. User config: ~/.config/herakles/config.yaml
-4. System config: /etc/herakles/config.yaml
+4. System config: /etc/herakles-node-exporter/config.yaml
 
 Key configuration options:
 - port: HTTP listen port (default: 9215)

@@ -155,7 +155,7 @@ fn is_root() -> bool {
 fn create_directories() -> Result<(), Box<dyn std::error::Error>> {
     let dirs = [
         "/opt/herakles/bin",
-        "/etc/herakles",
+        "/etc/herakles-node-exporter",
         "/var/lib/herakles/ebpf",
         "/var/lib/herakles/state",
         "/run/herakles",
@@ -198,10 +198,10 @@ fn generate_default_config() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::default();
     let yaml = serde_yaml::to_string(&config)?;
 
-    fs::write("/etc/herakles/herakles-node-exporter.yaml", yaml)?;
-    set_permissions("/etc/herakles/herakles-node-exporter.yaml", 0o644)?;
+    fs::write("/etc/herakles-node-exporter/config.yaml", yaml)?;
+    set_permissions("/etc/herakles-node-exporter/config.yaml", 0o644)?;
 
-    println!("   ✅ Config written to /etc/herakles/herakles-node-exporter.yaml");
+    println!("   ✅ Config written to /etc/herakles-node-exporter/config.yaml");
     Ok(())
 }
 

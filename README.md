@@ -241,7 +241,7 @@ subgroups = [
 `cmdline_matches` is the right tool for JVM-based services where `/proc/<pid>/comm` is always `java` — match on the
 main class or startup script instead.
 
-File search order: `./subgroups.toml` → `/etc/herakles/subgroups.toml`.
+File search order: `./subgroups.toml` → `/etc/herakles-node-exporter/subgroups.toml`.
 
 List loaded subgroups at runtime:
 

@@ -549,9 +549,9 @@ pub fn load_config(path: Option<&str>) -> Result<Config, Box<dyn std::error::Err
     } else {
         // Try default locations
         let defaults = [
-            "/etc/herakles/node-exporter.yaml",
-            "/etc/herakles/node-exporter.yml",
-            "/etc/herakles/node-exporter.json",
+            "/etc/herakles-node-exporter/config.yaml",
+            "/etc/herakles-node-exporter/config.yml",
+            "/etc/herakles-node-exporter/config.json",
             "./herakles-node-exporter.yaml",
             "./herakles-node-exporter.yml",
             "./herakles-node-exporter.json",

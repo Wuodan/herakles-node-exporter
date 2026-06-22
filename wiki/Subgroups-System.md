@@ -214,13 +214,13 @@ subgroups = [
 Custom subgroups are loaded from multiple locations (later files override earlier):
 
 1. **Built-in subgroups** - Compiled into the binary from `data/subgroups.toml`
-2. **System-wide** - `/etc/herakles/subgroups.toml`
+2. **System-wide** - `/etc/herakles-node-exporter/subgroups.toml`
 3. **Current directory** - `./subgroups.toml`
 
 ### Example: Custom Application Monitoring
 
 ```toml
-# /etc/herakles/subgroups.toml - Custom subgroups for our stack
+# /etc/herakles-node-exporter/subgroups.toml - Custom subgroups for our stack
 
 subgroups = [
   # Our custom microservices

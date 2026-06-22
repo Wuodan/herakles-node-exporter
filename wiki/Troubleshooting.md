@@ -419,7 +419,7 @@ cache_ttl: 120
 
 ### How do I add monitoring for custom processes?
 
-Create `/etc/herakles/subgroups.toml`:
+Create `/etc/herakles-node-exporter/subgroups.toml`:
 ```toml
 subgroups = [
   { group = "myapp", subgroup = "api", matches = ["myapp-api"] },
