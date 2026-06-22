@@ -82,7 +82,7 @@ sudo install -m 0755 target/release/herakles-node-exporter /usr/local/bin/herakl
 
 ## Docker
 
-Copy the `musl` binaries from the 
+Copy the `musl` binaries from the
 [latest release](https://github.com/herakles-now/herakles-node-exporter/releases/latest) to `./herakles-node-exporter`
 or build them from source.
 
