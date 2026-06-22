@@ -16,8 +16,6 @@ default = ["ebpf"]
 ebpf = ["libbpf-rs", "libbpf-sys"]
 # Enable eBPF with vendored libelf/zlib for musl/static builds
 ebpf-vendored = ["ebpf", "libbpf-sys/vendored"]
-# Enable actix-web health server example
-health-actix = ["actix-web"]
 
 [dependencies]
 axum = { version = "0.8", features = ["http1", "macros", "tokio"] }
@@ -52,9 +50,6 @@ rand = "0.10"
 
 # DateTime handling for testdata timestamp
 chrono = { version = "0.4", features = ["serde"] }
-
-# Optional: actix-web for health server example
-actix-web = { version = "4", optional = true }
 
 # TLS support
 axum-server = { version = "0.8", features = ["tls-rustls"] }
