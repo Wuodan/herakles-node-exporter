@@ -51,39 +51,7 @@ cargo run -- --help
 cargo run -- -p 9215 --log-level debug
 ```
 
-## Method 2: Debian/Ubuntu Package
-
-### Build the Package
-
-```bash
-# Install cargo-deb if not present
-cargo install cargo-deb
-
-# Build .deb package
-cargo deb
-
-# The package is created at:
-ls -la target/debian/herakles-node-exporter_*.deb
-```
-
-### Install the Package
-
-```bash
-# Install the .deb package
-sudo dpkg -i target/debian/herakles-node-exporter_*.deb
-
-# Or with apt (handles dependencies)
-sudo apt install ./target/debian/herakles-node-exporter_*.deb
-```
-
-### Package Contents
-
-The Debian package installs:
-- `/usr/bin/herakles-node-exporter` - Main binary
-- `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
-- `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
-
-## Method 3: Docker
+## Method 2: Docker
 
 ### Build Docker Image
 
@@ -133,7 +101,7 @@ docker run -d \
   herakles-node-exporter
 ```
 
-## Method 4: Docker Compose
+## Method 3: Docker Compose
 
 ### Basic Setup
 
