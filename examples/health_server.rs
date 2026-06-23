@@ -14,12 +14,7 @@
 //! curl http://localhost:8080/health
 //! ```
 
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
 use herakles_node_exporter::{AppConfig, BufferHealthConfig, HealthState};
 use std::sync::Arc;
 
