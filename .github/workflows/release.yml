@@ -32,6 +32,7 @@ jobs:
     env:
       EXTRA_BUNDLES: >-
         install.sh
+        herakles-node-exporter-dashboard.tar.gz
 
     steps:
       - name: Checkout code
@@ -78,6 +79,25 @@ jobs:
         with:
           subject-path: release/install.sh
 
+      - name: Package Grafana dashboard stack to herakles-node-exporter-dashboard.tar.gz
+        run: |
+          set -euo pipefail
+          mkdir -p release/herakles-node-exporter-dashboard
+          cp -a \
+            docker-compose.yml \
+            grafana \
+            prometheus \
+            release/herakles-node-exporter-dashboard/
+          tar -czf release/herakles-node-exporter-dashboard.tar.gz \
+            -C release \
+            herakles-node-exporter-dashboard
+          rm -rf release/herakles-node-exporter-dashboard
+
+      - name: Generate provenance attestation for herakles-node-exporter-dashboard.tar.gz
+        uses: actions/attest@v4
+        with:
+          subject-path: release/herakles-node-exporter-dashboard.tar.gz
+
       - name: Export provenance
         env:
           GH_TOKEN: ${{ github.token }}
@@ -93,7 +113,7 @@ jobs:
               "release/${bundle}" \
               "release/provenance/${bundle}.attestation.jsonl"
           done
-          # Export provenance for install.sh
+          # Export provenance for install.sh and herakles-node-exporter-dashboard.tar.gz
           for bundle in ${EXTRA_BUNDLES}; do
             scripts/download-attestation-bundle.sh \
               "release/${bundle}" \
@@ -117,7 +137,7 @@ jobs:
               --bundle "signature/${bundle}.sigstore.json" \
               "${bundle}"
           done
-          # Sign install.sh
+          # Sign install.sh and herakles-node-exporter-dashboard.tar.gz
           for bundle in ${EXTRA_BUNDLES}; do
             cosign sign-blob \
               --bundle "signature/${bundle}.sigstore.json" \
