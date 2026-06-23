@@ -127,56 +127,16 @@ Run `herakles-node-exporter` on the host.
 
 ### Full Stack with Prometheus & Grafana
 
+```bash
+# Clone the repository
+git clone https://github.com/cansp-dev/herakles-node-exporter.git
+cd herakles-node-exporter
 
-```yaml
-# docker-compose.yml
-version: '3.8'
-
-services:
-  herakles-exporter:
-    image: herakles-node-exporter:latest
-    build: .
-    container_name: herakles-exporter
-    ports:
-      - "9215:9215"
-    volumes:
-      - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro
-    command: ["-c", "/etc/herakles/herakles-node-exporter.yaml"]
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    depends_on:
-      - herakles-exporter
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
-volumes:
-  prometheus-data:
-  grafana-data:
-```
+# Start from docker-compose.yml
+docker compose up -d
+# Or use the older docker-compose command with:
+# docker-compose up -d
+````
 
 ## Systemd Service Setup
 
