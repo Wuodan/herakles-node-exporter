@@ -68,7 +68,50 @@ sudo herakles-node-exporter install --force
 sudo herakles-node-exporter uninstall
 ```
 
-## Method 2: From Source
+## Method 2: Docker Compose
+
+> Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
+> `herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
+
+### Basic Setup
+
+Run `herakles-node-exporter` on the host on port `9215`.
+
+### Full Stack With Prometheus & Grafana
+
+Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
+`herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
+
+But it can work very well with other containers. A Grafana dashboard backed by Prometheus running in docker-compose
+can be started as described below.
+
+### Run `herakles-now-exporter` On The Host
+
+Run `herakles-now-exporter` on the host on port `9215`.
+
+### Start Docker Compose
+
+```bash
+# Clone the repository
+git clone https://github.com/cansp-dev/herakles-node-exporter.git
+cd herakles-node-exporter
+
+# Run docker compose with docker-compose.yml
+docker compose up -d
+# Or use the older docker-compose command with:
+# docker-compose up -d
+```
+
+### View Grafana Dashboard
+
+1. Open [http://localhost:3000](http://localhost:3000)
+2. Login with user `admin` and password `admin`
+
+### View Prometheus Console
+
+Open [http://localhost:9090/targets](http://localhost:9090/targets)
+
+## Method 3: From Source
 
 The `ebpf` feature is enabled by default. Building with eBPF requires:
 
@@ -115,49 +158,6 @@ cargo run -- --help
 # Run with specific options
 cargo run -- -p 9215 --log-level debug
 ```
-
-## Method 3: Docker Compose
-
-> Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
-> `herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
-
-### Basic Setup
-
-Run `herakles-node-exporter` on the host on port `9215`.
-
-### Full Stack With Prometheus & Grafana
-
-Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
-`herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
-
-But it can work very well with other containers. A Grafana dashboard backed by Prometheus running in docker-compose
-can be started as described below.
-
-### Run `herakles-now-exporter` On The Host
-
-Run `herakles-now-exporter` on the host on port `9215`.
-
-### Start Docker Compose
-
-```bash
-# Clone the repository
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
-cd herakles-node-exporter
-
-# Run docker compose with docker-compose.yml
-docker compose up -d
-# Or use the older docker-compose command with:
-# docker-compose up -d
-```
-
-### View Grafana Dashboard
-
-1. Open [http://localhost:3000](http://localhost:3000)
-2. Login with user `admin` and password `admin`
-
-### View Prometheus Console
-
-Open [http://localhost:9090/targets](http://localhost:9090/targets)
 
 ## Systemd Service
 
