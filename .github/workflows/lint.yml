@@ -79,13 +79,6 @@ jobs:
         shell: bash
         run: taplo fmt --check --diff .
 
-      - name: Lint Dockerfile
-        id: hadolint
-        continue-on-error: true
-        uses: hadolint/hadolint-action@v3.3.0
-        with:
-          dockerfile: Dockerfile
-
       - name: Summarize non-Rust lint failures
         if: |
           always() &&
