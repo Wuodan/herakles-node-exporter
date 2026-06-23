@@ -84,16 +84,43 @@ Open [http://localhost:9215/html/dashboard](http://localhost:9215/html/dashboard
 The [Installation Guide](https://github.com/herakles-now/herakles-node-exporter/blob/main/wiki/Installation.md#installation-guide)
 shows other installation methods and [how to uninstall](https://github.com/herakles-now/herakles-node-exporter/blob/main/wiki/Installation.md#uninstall).
 
-Prometheus scrape config:
+Prometheus scrape config: [prometheus.yml](prometheus/prometheus.yml)
 
-```yaml
-scrape_configs:
-  - job_name: 'herakles'
-    static_configs:
-      - targets: ['localhost:9215']
-    scrape_interval: 60s
-    scrape_timeout: 30s
+---
+
+## Grafana Dashboard Stack
+
+This adds a Grafana dashboard backed by Prometheus in docker-compose.
+
+`herakles-now-exporter` must be running on the host on port `9215`.
+
+### Download The Grafana Dashboard Stack
+
+```bash
+# Download and unpack herakles-node-exporter-dashboard.tar.gz
+curl -LO \
+  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-dashboard.tar.gz
+tar -xzf herakles-node-exporter-dashboard.tar.gz
+````
+
+### Start Docker Compose
+
+```bash
+cd herakles-node-exporter-dashboard
+# Run docker compose with docker-compose.yml
+docker compose up -d
+# Or use the older docker-compose command with:
+# docker-compose up -d
 ```
+
+### View Grafana Dashboard
+
+1. Open [http://localhost:3000](http://localhost:3000)
+2. Login with user `admin` and password `admin`
+
+### View Prometheus console
+
+Open [http://localhost:9090/targets](http://localhost:9090/targets)
 
 ---
 
@@ -431,42 +458,6 @@ Always registered. Only updated when the `ebpf` feature is compiled in and eBPF 
 
 ## Installation
 
-### Build
-
-The `ebpf` feature is enabled by default. Building with eBPF requires `clang`, `bpftool`, and a kernel with BTF
-support (`/sys/kernel/btf/vmlinux`).
-
-```bash
-# Install build dependencies (Debian/Ubuntu)
-sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r) bpftool
-
-# Release build with eBPF
-make release
-
-# Release build without eBPF (smaller binary, no clang/bpftool dependency)
-make release CARGOFLAGS='--no-default-features'
-
-# Binary lands in binary/herakles-node-exporter regardless of build profile
-```
-
-### System-wide installation
-
-```bash
-# Install binary + systemd service (requires root)
-sudo ./binary/herakles-node-exporter install
-
-# Install without starting the service
-sudo ./binary/herakles-node-exporter install --no-service
-
-# Force reinstall over existing installation
-sudo ./binary/herakles-node-exporter install --force
-
-# Uninstall
-sudo ./binary/herakles-node-exporter uninstall
-```
-
-Installation places the binary at `/opt/herakles/bin/`, configuration at `/etc/herakles/`, and the systemd service at `/etc/systemd/system/herakles-node-exporter.service`.
-
 ### Docker
 
 The image expects a pre-built statically linked musl binary and runs as the `herakles` user (uid=1000). `--pid=host`
@@ -619,14 +610,14 @@ The `ebpf` feature is compiled in by default and provides:
 
 ### Requirements
 
-| Requirement | Detail |
-|---|---|
-| Linux kernel | ≥ 4.18 with BTF enabled |
+| Requirement | Detail                               |
+|---|--------------------------------------|
+| Linux kernel | ≥ 4.18 with BTF enabled              |
 | BTF | `/sys/kernel/btf/vmlinux` must exist |
-| Capabilities | `CAP_BPF` + `CAP_PERFMON`, or root |
-| Build: clang | ≥ 10 |
-| Build: bpftool | any recent version |
-| Build: libbpf | pulled automatically by Cargo |
+| Capabilities | `CAP_BPF` + `CAP_PERFMON`, and root  |
+| Build: clang | ≥ 10                                 |
+| Build: llvm | any recent version                   |
+| Build: libbpf | pulled automatically by Cargo        |
 
 ### Graceful degradation
 
@@ -651,10 +642,10 @@ uname -r
 capsh --print | grep -E 'cap_bpf|cap_perfmon'
 
 # Build tools
-clang --version && bpftool version
+clang --version && llvm-strip --version
 
 # Runtime requirement check
-herakles-node-exporter check-requirements --ebpf
+herakles-node-exporter check --all
 
 # eBPF status at runtime
 curl http://localhost:9215/health
@@ -760,73 +751,6 @@ Commands:
 | `--disable-ebpf-disk` | — | false | Disable eBPF disk I/O tracking |
 | `--enable-tcp-tracking` | — | false | Enable TCP state tracking via eBPF |
 | `--disable-tcp-tracking` | — | false | Disable TCP state tracking via eBPF |
-
----
-
-## Running as Root
-
-Reading `/proc/<pid>/smaps_rollup` for processes owned by other users requires root privileges. This file provides
-accurate USS (Unique Set Size) figures. Without root, USS data for root-owned processes is unavailable and those
-processes are silently excluded from group memory metrics.
-
-After eBPF programs are loaded and pinned, the process attempts to drop to the `herakles` system user if it exists
-(`drop_privileges()` in `src/main.rs`). If the `herakles` user does not exist, the process continues as root — which
-is the recommended production configuration for complete multi-user system monitoring.
-
-Check effective user before debugging missing processes:
-
-```bash
-ps aux | grep herakles-node-exporter
-# Should show: root ... herakles-node-exporter
-```
-
----
-
-## Systemd Service
-
-```ini
-[Unit]
-Description=Herakles Node Exporter
-Documentation=https://github.com/herakles-now/herakles-node-exporter
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/opt/herakles/bin/herakles-node-exporter
-Restart=on-failure
-RestartSec=5s
-ProtectSystem=strict
-ReadOnlyPaths=/proc
-PrivateTmp=true
-NoNewPrivileges=false
-
-[Install]
-WantedBy=multi-user.target
-```
-
----
-
-## Docker Compose
-
-```yaml
-services:
-  herakles-node-exporter:
-    image: herakles-node-exporter:latest
-    container_name: herakles-node-exporter
-    pid: host
-    volumes:
-      - /proc:/proc:ro
-    ports:
-      - "9215:9215"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9215/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-```
 
 ---
 
