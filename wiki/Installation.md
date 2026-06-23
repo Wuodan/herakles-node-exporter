@@ -126,7 +126,7 @@ Open [http://localhost:9090/targets](http://localhost:9090/targets)
 
 Normal installation automatically sets up a `systemd` service, starts it and prints relevant information.
 
-> [install.sh](https://github.com/herakles-now/herakles-node-exporter/blob/main/scripts/install.sh) runs 
+> [install.sh](https://github.com/herakles-now/herakles-node-exporter/blob/main/scripts/install.sh) runs
 > `herakles-node-exporter install` which sets up the service.
 
 ```bash
