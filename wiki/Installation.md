@@ -123,23 +123,10 @@ docker run -d --rm \
 
 ### Basic Setup
 
-```yaml
-# docker-compose.yml
-version: '3.8'
-
-services:
-  herakles-exporter:
-    image: herakles-node-exporter:latest
-    build: .
-    container_name: herakles-exporter
-    ports:
-      - "9215:9215"
-    volumes:
-      - /proc:/host/proc:ro
-    restart: unless-stopped
-```
+Run `herakles-node-exporter` on the host.
 
 ### Full Stack with Prometheus & Grafana
+
 
 ```yaml
 # docker-compose.yml
