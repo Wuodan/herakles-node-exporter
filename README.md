@@ -383,7 +383,6 @@ Always registered. Only updated when the `ebpf` feature is compiled in and eBPF 
 
 ### Build
 
-
 ```bash
 # Install build dependencies (Debian/Ubuntu)
 sudo apt-get install -y clang libelf-dev
