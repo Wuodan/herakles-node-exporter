@@ -1,13 +1,13 @@
 services:
-  herakles-exporter:
-    image: herakles-node-exporter:latest
-    build: .
-    container_name: herakles-exporter
-    ports:
-      - "9215:9215"
-    volumes:
-      - /proc:/host/proc:ro
-    restart: unless-stopped
+#  herakles-exporter:
+#    image: herakles-node-exporter:latest
+#    build: .
+#    container_name: herakles-exporter
+#    ports:
+#      - "9215:9215"
+#    volumes:
+#      - /proc:/host/proc:ro
+#    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
@@ -20,8 +20,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-    depends_on:
-      - herakles-exporter
+#    depends_on:
+#      - herakles-exporter
     restart: unless-stopped
 
   grafana:
