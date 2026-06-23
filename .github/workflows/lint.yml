@@ -45,6 +45,11 @@ jobs:
         continue-on-error: true
         uses: rhysd/actionlint@v1.7.12
 
+      - name: Lint YAML
+        id: yamllint
+        continue-on-error: true
+        uses: ibiqlik/action-yamllint@v3
+
       - name: Lint Markdown
         id: markdown
         continue-on-error: true
@@ -86,6 +91,7 @@ jobs:
           always() &&
           (
             steps.actionlint.outcome == 'failure' ||
+            steps.yamllint.outcome == 'failure' ||
             steps.markdown.outcome == 'failure' ||
             steps.shellcheck.outcome == 'failure' ||
             steps.taplo.outcome == 'failure' ||
@@ -94,6 +100,7 @@ jobs:
         run: |
           failed_steps=()
           [[ "${{ steps.actionlint.outcome }}" == "failure" ]] && failed_steps+=("Lint GitHub Actions workflows")
+          [[ "${{ steps.yamllint.outcome }}" == "failure" ]] && failed_steps+=("Lint YAML")
           [[ "${{ steps.markdown.outcome }}" == "failure" ]] && failed_steps+=("Lint Markdown")
           [[ "${{ steps.shellcheck.outcome }}" == "failure" ]] && failed_steps+=("Lint shell scripts")
           [[ "${{ steps.taplo.outcome }}" == "failure" ]] && failed_steps+=("Check TOML formatting")

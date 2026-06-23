@@ -26,18 +26,13 @@ The separation is architectural and deliberate. See [Why this architecture?](#wh
 ## Quick Start
 
 ```bash
-# Clone and build (eBPF enabled by default)
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
-cd herakles-node-exporter
-make release
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sudo sh
 
-# Run (root required for full /proc coverage)
-sudo ./binary/herakles-node-exporter
-
-# Verify
 curl http://localhost:9215/metrics | grep herakles_group_memory_rss
 curl http://localhost:9215/html/details
 ```
+
+Manual installation instructions are in [wiki/Installation.md](wiki/Installation.md).
 
 Prometheus scrape config:
 
@@ -445,7 +440,7 @@ docker run -d \
 Configuration is loaded from the first file found in this order, then merged with CLI flags (CLI takes precedence):
 
 1. `--config <path>` if specified
-2. `/etc/herakles/node-exporter.yaml` (also `.yml`, `.json`)
+2. `/etc/herakles/herakles-node-exporter.yaml` (also `.yml`, `.json`)
 3. `./herakles-node-exporter.yaml` (also `.yml`, `.json`)
 
 Use `--no-config` to ignore all config files. Use `--show-config` to print the effective merged configuration.
@@ -748,7 +743,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/herakles-node-exporter
+ExecStart=/opt/herakles/bin/herakles-node-exporter
 Restart=on-failure
 RestartSec=5s
 ProtectSystem=strict

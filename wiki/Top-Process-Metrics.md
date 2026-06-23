@@ -589,7 +589,7 @@ If `herakles_top_net_process_*` metrics are missing:
 3. **Check permissions:**
    ```bash
    # Run with capabilities
-   sudo setcap cap_bpf,cap_perfmon=ep /usr/local/bin/herakles-node-exporter
+   sudo setcap cap_bpf,cap_perfmon=ep /opt/herakles/bin/herakles-node-exporter
    ```
 
 4. **Review logs:**

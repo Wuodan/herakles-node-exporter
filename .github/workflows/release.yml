@@ -20,9 +20,9 @@ jobs:
       attestations: write
       id-token: write
     with:
-      upload-release-binary: true
+      release-version: ${{ github.ref_name }}
 
-  build-and-release:
+  release-with-artifacts:
     needs: ci
     runs-on: ubuntu-latest
     permissions:
@@ -32,60 +32,83 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Download and verify tested release binary
+      - name: Write release SHA map
+        run: |
+          set -euo pipefail
+          # Keep the release target list in one small manifest for later steps.
+          cat > release-shas.json <<EOF
+          {
+            "x86_64-linux-gnu": "${{ needs.ci.outputs.release-binary-sha256-x86_64-linux-gnu }}",
+            "x86_64-linux-musl": "${{ needs.ci.outputs.release-binary-sha256-x86_64-linux-musl }}",
+            "aarch64-linux-gnu": "${{ needs.ci.outputs.release-binary-sha256-aarch64-linux-gnu }}",
+            "aarch64-linux-musl": "${{ needs.ci.outputs.release-binary-sha256-aarch64-linux-musl }}"
+          }
+          EOF
+
+      - name: Download and verify tested release binaries
         uses: ./.github/actions/download-and-verify-run-artifact
         with:
-          artifact-name: herakles-node-exporter-release-binary
-          target-dir: dist
-          file-path: herakles-node-exporter
-          expected-sha256: ${{ needs.ci.outputs.release-binary-sha256 }}
-          checksum-file: herakles-node-exporter.sha256
+          artifact-pattern: herakles-node-exporter-release-binary-*
+          sha-map-file: release-shas.json
+          target-dir: release
 
-      - name: Export attestation bundle
-        uses: ./.github/actions/export-attestation-bundle
-        with:
-          artifact-path: dist/herakles-node-exporter
-          target-dir: provenance
-
-      - name: Package binary
+      - name: Package binaries
         run: |
-          cp dist/herakles-node-exporter herakles-node-exporter
-          chmod +x herakles-node-exporter
-          tar -czf herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz herakles-node-exporter
-          sha256sum herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sha256
-          sha256sum herakles-node-exporter > herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sha256
+          set -euo pipefail
+          for target in $(jq -r 'keys[]' release-shas.json); do
+            chmod +x "release/herakles-node-exporter-${target}"
+          done
+
+      - name: Export provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p release/provenance
+          gh attestation trusted-root > release/provenance/herakles-node-exporter-trusted-root.jsonl
+          for target in $(jq -r 'keys[]' release-shas.json); do
+            scripts/download-attestation-bundle.sh \
+              "release/herakles-node-exporter-${target}" \
+              "release/provenance/herakles-node-exporter-${target}-attestation.jsonl"
+          done
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.2
 
-      - name: Sign release binary with Cosign
+      - name: Sign release assets with Cosign
         env:
           COSIGN_YES: "true"
         run: |
           set -euo pipefail
-          cosign sign-blob \
-            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sigstore.json" \
-            "herakles-node-exporter"
+          cd release
+          for target in $(jq -r 'keys[]' ../release-shas.json); do
+            cosign sign-blob \
+              --bundle "herakles-node-exporter-${target}.sigstore.json" \
+              "herakles-node-exporter-${target}"
+          done
 
-      - name: Sign release tarball with Cosign
-        env:
-          COSIGN_YES: "true"
+      - name: Package install.sh
         run: |
           set -euo pipefail
-          cosign sign-blob \
-            --bundle "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sigstore.json" \
-            "herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz"
+          cp scripts/install.sh release/install.sh
+          sed -i \
+            -e 's/^REPO_OWNER=.*/REPO_OWNER="${{ github.repository_owner }}"/' \
+            -e 's/^REPO_NAME=.*/REPO_NAME="${{ github.event.repository.name }}"/' \
+            release/install.sh
+
+      - name: Package SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum herakles-node-exporter* install.sh > SHA256SUMS
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          working_directory: release
           generate_release_notes: true
           files: |
-            herakles-node-exporter
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sha256
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.sigstore.json
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sha256
-            herakles-node-exporter-${{ github.ref_name }}-x86_64-linux.tar.gz.sigstore.json
-            provenance/herakles-node-exporter-attestation.jsonl
-            provenance/trusted_root.jsonl
+            herakles-node-exporter*
+            install.sh
+            provenance/*.jsonl
+            SHA256SUMS

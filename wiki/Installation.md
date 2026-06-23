@@ -15,7 +15,36 @@ This guide covers all installation methods for the Herakles Process Memory Expor
 herakles-node-exporter check --all
 ```
 
-## Method 1: From Source
+## Method 1: Install Release Binary
+
+### One-Line Installer
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sudo sh
+```
+
+Specific version:
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | \
+  sudo sh -s -- --version <version>
+```
+
+### Manual Binary Install
+
+Download the matching binary from the release page and install it directly.
+
+Example:
+
+```bash
+curl -fL -o herakles-node-exporter \
+  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-x86_64-linux-gnu
+chmod +x herakles-node-exporter
+sudo install -m 0755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
+herakles-node-exporter --version
+```
+
+## Method 2: From Source
 
 ### Release Build
 
@@ -31,8 +60,7 @@ cargo build --release
 ls -la target/release/herakles-node-exporter
 
 # Install system-wide
-sudo cp target/release/herakles-node-exporter /usr/local/bin/
-sudo chmod +x /usr/local/bin/herakles-node-exporter
+sudo install -m 0755 target/release/herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
 
 # Verify installation
 herakles-node-exporter --version
@@ -51,38 +79,6 @@ cargo run -- --help
 cargo run -- -p 9215 --log-level debug
 ```
 
-## Method 2: Debian/Ubuntu Package
-
-### Build the Package
-
-```bash
-# Install cargo-deb if not present
-cargo install cargo-deb
-
-# Build .deb package
-cargo deb
-
-# The package is created at:
-ls -la target/debian/herakles-node-exporter_*.deb
-```
-
-### Install the Package
-
-```bash
-# Install the .deb package
-sudo dpkg -i target/debian/herakles-node-exporter_*.deb
-
-# Or with apt (handles dependencies)
-sudo apt install ./target/debian/herakles-node-exporter_*.deb
-```
-
-### Package Contents
-
-The Debian package installs:
-- `/usr/bin/herakles-node-exporter` - Main binary
-- `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
-- `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
-
 ## Method 3: Docker
 
 ### Build Docker Image
@@ -96,7 +92,7 @@ COPY . .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/herakles-node-exporter /usr/local/bin/
+COPY --from=builder /app/target/release/herakles-node-exporter /opt/herakles/bin/
 EXPOSE 9215
 ENTRYPOINT ["herakles-node-exporter"]
 ```
@@ -121,8 +117,8 @@ docker run -d \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/config.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/config.yaml
+  -v $(pwd)/config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro \
+  herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 
 # With environment variables
 docker run -d \
@@ -168,8 +164,8 @@ services:
       - "9215:9215"
     volumes:
       - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/config.yaml:ro
-    command: ["-c", "/etc/herakles/config.yaml"]
+      - ./config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro
+    command: ["-c", "/etc/herakles/herakles-node-exporter.yaml"]
     restart: unless-stopped
 
   prometheus:
@@ -222,7 +218,7 @@ Wants=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
-ExecStart=/usr/local/bin/herakles-node-exporter -c /etc/herakles/config.yaml
+ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
@@ -254,7 +250,7 @@ sudo mkdir -p /etc/herakles
 sudo chown prometheus:prometheus /etc/herakles
 
 # Create minimal config
-sudo tee /etc/herakles/config.yaml << 'EOF'
+sudo tee /etc/herakles/herakles-node-exporter.yaml << 'EOF'
 port: 9215
 bind: "0.0.0.0"
 cache_ttl: 30
@@ -333,7 +329,7 @@ curl http://localhost:9215/health
 ```bash
 # Error: Permission denied reading /proc/*/smaps
 # Solution: Run with appropriate capabilities
-sudo setcap cap_dac_read_search+ep /usr/local/bin/herakles-node-exporter
+sudo setcap cap_dac_read_search+ep /opt/herakles/bin/herakles-node-exporter
 ```
 
 ### Port Already in Use

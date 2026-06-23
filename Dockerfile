@@ -16,7 +16,7 @@ RUN addgroup -g 1000 herakles && \
 # Copy the pre-built binary (injected by CI pipeline)
 # The binary is built with musl and statically linked
 ARG TARGETPLATFORM
-COPY --chmod=755 herakles-node-exporter /usr/local/bin/herakles-node-exporter
+COPY --chmod=755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
 
 # Set up /proc access (read-only mount point for container runtime)
 # The actual /proc mount is done at container runtime via -v /proc:/host/proc:ro
@@ -32,7 +32,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD wget -q -O /dev/null http://localhost:9215/health || exit 1
 
 # Set entrypoint to the exporter binary
-ENTRYPOINT ["/usr/local/bin/herakles-node-exporter"]
+ENTRYPOINT ["/opt/herakles/bin/herakles-node-exporter"]
 
 # Default command (can be overridden)
 CMD []
