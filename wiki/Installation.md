@@ -79,129 +79,58 @@ cargo run -- --help
 cargo run -- -p 9215 --log-level debug
 ```
 
-## Method 3: Docker
+## Method 3: Docker Compose
 
-### Build Docker Image
-
-```bash
-# Clone the repository
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
-cd herakles-node-exporter
-
-# Build the image
-docker build -t herakles-node-exporter:latest .
-````
-
-### Run Container
-
-```bash
-# Basic run (requires /proc access)
-docker run -d --rm \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  herakles-node-exporter
-
-# With custom config
-docker run -d --rm \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
-
-# With environment variables
-docker run -d --rm \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -e RUST_LOG=info \
-  herakles-node-exporter
-```
-
-## Method 4: Docker Compose
+> Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
+> `herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
 
 ### Basic Setup
 
-Run `herakles-node-exporter` on the host.
+Run `herakles-node-exporter` on the host on port `9215`.
 
 ### Full Stack with Prometheus & Grafana
+
+Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
+`herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
+
+But it can work very well with other containers. A Grafana dashboard backed by Prometheus running in docker-compose
+can be started by:
+
+### Run `herakles-now-exporter` On The Host
+
+Run `herakles-now-exporter` on the host on port `9215`.
+
+### Start Docker Compose
 
 ```bash
 # Clone the repository
 git clone https://github.com/cansp-dev/herakles-node-exporter.git
 cd herakles-node-exporter
 
-# Start from docker-compose.yml
+# Run docker compose with docker-compose.yml
 docker compose up -d
 # Or use the older docker-compose command with:
 # docker-compose up -d
-````
-
-## Systemd Service Setup
-
-### Create Service File
-
-```bash
-# Create service file
-sudo tee /etc/systemd/system/herakles-node-exporter.service << 'EOF'
-[Unit]
-Description=Herakles Process Memory Exporter
-Documentation=https://github.com/cansp-dev/herakles-node-exporter
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=prometheus
-Group=prometheus
-ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
-Restart=always
-RestartSec=5
-TimeoutStopSec=30
-
-# Security hardening
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadOnlyPaths=/
-ReadWritePaths=/var/log
-
-# Capability to read /proc
-CapabilityBoundingSet=CAP_DAC_READ_SEARCH
-AmbientCapabilities=CAP_DAC_READ_SEARCH
-
-[Install]
-WantedBy=multi-user.target
-EOF
 ```
 
-### Enable and Start Service
+### View Grafana Dashboard
+
+1. Open [http://localhost:3000](http://localhost:3000)
+2. Login with user `admin` and password `admin`
+
+### View Prometheus console
+
+Open [http://localhost:9090/targets](http://localhost:9090/targets)
+
+## Systemd Service
+
+Normal installation automatically sets up a `systemd` service, starts it and prints relevant information.
+
+> [install.sh](https://github.com/herakles-now/herakles-node-exporter/blob/main/scripts/install.sh) runs 
+> `herakles-node-exporter install` which sets up the service.
 
 ```bash
-# Create dedicated user
-sudo useradd -r -s /sbin/nologin prometheus
-
-# Create config directory
-sudo mkdir -p /etc/herakles
-sudo chown prometheus:prometheus /etc/herakles
-
-# Create minimal config
-sudo tee /etc/herakles/herakles-node-exporter.yaml << 'EOF'
-port: 9215
-bind: "0.0.0.0"
-cache_ttl: 30
-log_level: "info"
-EOF
-
-# Reload systemd
-sudo systemctl daemon-reload
-
-# Enable and start service
-sudo systemctl enable herakles-node-exporter
-sudo systemctl start herakles-node-exporter
-
-# Check status
+# Check service status
 sudo systemctl status herakles-node-exporter
 ```
 
