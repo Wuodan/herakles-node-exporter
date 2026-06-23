@@ -1,38 +1,69 @@
 # Multi-stage Dockerfile for herakles-node-exporter
-# Optimized for minimal runtime image size with musl
+# Builds the x86_64 musl eBPF-enabled binary using the same musl compatibility
+# approach as CI, then ships it in a small Alpine runtime image.
 
-# Build stage - uses pre-built musl binaries from CI
-FROM alpine:3.19 AS runtime
+FROM ubuntu:24.04 AS builder
 
-# Install minimal runtime dependencies
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        autoconf \
+        automake \
+        autopoint \
+        bison \
+        build-essential \
+        clang \
+        ca-certificates \
+        curl \
+        flex \
+        gawk \
+        git \
+        libelf-dev \
+        libtool \
+        libtool-bin \
+        linux-libc-dev \
+        musl-tools \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
+ENV PATH=/opt/cargo/bin:${PATH}
+
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable
+
+WORKDIR /app
+COPY . .
+
+RUN rustup target add x86_64-unknown-linux-musl
+
+RUN set -euo pipefail \
+    && env_file=/tmp/herakles-musl.env \
+    && chmod +x ./scripts/setup-musl-ebpf-compat.sh \
+    && ./scripts/setup-musl-ebpf-compat.sh x86_64-unknown-linux-musl "${env_file}" \
+    && set -a \
+    && source "${env_file}" \
+    && set +a \
+    && cargo build --release --no-default-features --features ebpf-vendored --target x86_64-unknown-linux-musl
+
+FROM alpine:3.24 AS runtime
+
 RUN apk add --no-cache \
     ca-certificates \
     && rm -rf /var/cache/apk/*
 
-# Create non-root user for security
-RUN addgroup -g 1000 herakles && \
-    adduser -D -u 1000 -G herakles herakles
+RUN addgroup -g 1000 herakles \
+    && adduser -D -u 1000 -G herakles herakles
 
-# Copy the pre-built binary (injected by CI pipeline)
-# The binary is built with musl and statically linked
-ARG TARGETPLATFORM
-COPY --chmod=755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/herakles-node-exporter /opt/herakles/bin/
 
-# Set up /proc access (read-only mount point for container runtime)
-# The actual /proc mount is done at container runtime via -v /proc:/host/proc:ro
-
-# Use non-root user
 USER herakles
 
-# Expose the default Prometheus metrics port
 EXPOSE 9215
 
-# Health check using busybox wget (included in Alpine)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD wget -q -O /dev/null http://localhost:9215/health || exit 1
 
-# Set entrypoint to the exporter binary
 ENTRYPOINT ["/opt/herakles/bin/herakles-node-exporter"]
-
-# Default command (can be overridden)
 CMD []

@@ -19,7 +19,6 @@ LICENSE*
 
 # Test data
 testdata*.json
-data/
 
 # CI/CD files (not needed in image)
 .github/

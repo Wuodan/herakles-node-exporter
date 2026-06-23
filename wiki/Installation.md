@@ -83,37 +83,27 @@ cargo run -- -p 9215 --log-level debug
 
 ### Build Docker Image
 
-```dockerfile
-# Dockerfile
-FROM rust:1.75-slim as builder
-
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/herakles-node-exporter /opt/herakles/bin/
-EXPOSE 9215
-ENTRYPOINT ["herakles-node-exporter"]
-```
-
 ```bash
+# Clone the repository
+git clone https://github.com/cansp-dev/herakles-node-exporter.git
+cd herakles-node-exporter
+
 # Build the image
 docker build -t herakles-node-exporter:latest .
-```
+````
 
 ### Run Container
 
 ```bash
 # Basic run (requires /proc access)
-docker run -d \
+docker run -d --rm \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
   herakles-node-exporter
 
 # With custom config
-docker run -d \
+docker run -d --rm \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
@@ -121,7 +111,7 @@ docker run -d \
   herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 
 # With environment variables
-docker run -d \
+docker run -d --rm \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
