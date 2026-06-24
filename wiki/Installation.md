@@ -67,6 +67,14 @@ Next steps:
 
 Open [http://localhost:9215/html/dashboard](http://localhost:9215/html/dashboard) to see the dashboard.
 
+<details>
+
+<summary>Dashboard screenshot</summary>
+
+[![Dashboard screenshot](images/builtin-dashboard.png "Dashboard screenshot")](images/builtin-dashboard.png)
+
+</details>
+
 Specific version:
 
 ```bash

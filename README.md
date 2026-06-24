@@ -73,6 +73,14 @@ Next steps:
 
 Open [http://localhost:9215/html/dashboard](http://localhost:9215/html/dashboard) to see the dashboard.
 
+<details>
+
+<summary>Dashboard screenshot</summary>
+
+[![Dashboard screenshot](wiki/images/builtin-dashboard.png "Dashboard screenshot")](wiki/images/builtin-dashboard.png)
+
+</details>
+
 The [Installation Guide](https://github.com/herakles-now/herakles-node-exporter/blob/main/wiki/Installation.md#installation-guide)
 shows other installation methods and [how to uninstall](https://github.com/herakles-now/herakles-node-exporter/blob/main/wiki/Installation.md#uninstall).
 
