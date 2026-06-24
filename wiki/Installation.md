@@ -2,20 +2,82 @@
 
 This guide covers all installation methods for the Herakles Process Memory Exporter.
 
+Installation places the binary at `/opt/herakles/bin/`, configuration at `/etc/herakles/`, and the systemd service at
+`/etc/systemd/system/herakles-node-exporter.service`.
+
 ## Prerequisites
 
 - **Linux**: Kernel 4.14+ recommended (for `smaps_rollup` support)
-- **Rust**: 1.70+ (for building from source)
-- **Permissions**: Read access to `/proc` filesystem
+- **Permissions**: Read access to `/proc` filesystem (root)
 
-### Check System Requirements
+## Uninstall
+
+Run this to uninstall `herakles-node-exporter`:
 
 ```bash
-# After installation, verify system compatibility
-herakles-node-exporter check --all
+sudo herakles-node-exporter uninstall
 ```
 
-## Method 1: Install Release Binary
+<details>
+
+<summary>Expected output</summary>
+
+### Uninstalled Including `systemd` Service
+
+Expected output:
+
+```text
+🗑  Herakles Node Exporter - System Uninstallation
+=================================================
+
+⚠  This will remove:
+   • systemd service (stopped and disabled)
+   • Binary: /opt/herakles/bin/herakles-node-exporter
+   • CLI symlink: /usr/local/bin/herakles-node-exporter
+   • Configuration: /etc/herakles/
+   • Directories: /opt/herakles/, /var/lib/herakles/, /run/herakles/
+   • BPF maps: /sys/fs/bpf/herakles/
+   • Kernel parameter config: /etc/sysctl.d/99-herakles-ebpf.conf
+
+Are you sure you want to continue? (yes/no): 
+yes
+
+🚀 Starting uninstallation...
+
+🛑 Stopping systemd service...
+   ✅ Service stopped
+❌ Disabling systemd service...
+Removed '/etc/systemd/system/multi-user.target.wants/herakles-node-exporter.service'.
+   ✅ Service disabled
+🗑  Removing systemd service file...
+   ✅ Service file removed
+🔄 Reloading systemd...
+   ✅ systemd reloaded
+🗑  Removing binary...
+   ✅ Binary removed: /opt/herakles/bin/herakles-node-exporter
+🗑  Removing CLI symlink...
+   ℹ  CLI symlink not found, skipping
+🗑  Removing configuration...
+   ✅ Configuration removed: /etc/herakles
+🗑  Removing directories...
+   ✅ Removed: /opt/herakles
+   ✅ Removed: /var/lib/herakles
+   ✅ Removed: /run/herakles
+   ✅ Removed: /sys/fs/bpf/herakles
+🗑  Removing kernel parameter configuration...
+   ✅ Sysctl configuration removed: /etc/sysctl.d/99-herakles-ebpf.conf
+   ℹ  Note: Kernel parameters remain active until reboot
+   To reset to system defaults immediately, run:
+      • sudo sysctl -w kernel.unprivileged_bpf_disabled=2
+      • sudo sysctl -w kernel.perf_event_paranoid=4
+
+✅ Uninstallation complete!
+   System has been returned to pre-installation state.
+```
+
+</details>
+
+## Method 1: Release Installer
 
 ### One-Line Installer
 
@@ -82,21 +144,101 @@ curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/lates
   sudo sh -s -- --version <version>
 ```
 
-### Manual Binary Install
+## Method 2: Grafana Dashboard In Docker Compose
 
-Download the matching binary from the release page and install it directly.
+> Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
+> `herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
 
-Example:
+### Basic Setup
+
+Run `herakles-node-exporter` on the host on port `9215`.
+
+### Full Stack With Prometheus & Grafana
+
+Due to technical restrictions by the Linux kernel and Docker it makes no sense (better wording please) to run
+`herakles-now-exporter` in containers. It cannot read useful metrics for either the container or the host there.
+
+But it can work very well with other containers. A Grafana dashboard backed by Prometheus running in docker-compose
+can be started as described below.
+
+### Run `herakles-now-exporter` On The Host
+
+Run `herakles-now-exporter` on the host on port `9215`.
+
+### Download The Grafana Dashboard Stack
 
 ```bash
-curl -fL -o herakles-node-exporter \
-  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-x86_64-linux-gnu
-chmod +x herakles-node-exporter
-sudo install -m 0755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
-herakles-node-exporter --version
+# Download and unpack herakles-node-exporter-dashboard.tar.gz
+curl -LO \
+  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-dashboard.tar.gz
+tar -xzf herakles-node-exporter-dashboard.tar.gz
+# Or clone the repository
+git clone https://github.com/cansp-dev/herakles-node-exporter.git
+````
+
+### Start Docker Compose
+
+```bash
+cd herakles-node-exporter-dashboard
+# Run docker compose with docker-compose.yml
+docker compose up -d
+# Or use the older docker-compose command with:
+# docker-compose up -d
 ```
 
-## Method 2: From Source
+### View Grafana Dashboard
+
+1. Open [http://localhost:3000](http://localhost:3000)
+2. Login with user `admin` and password `admin`
+
+### View Prometheus Console
+
+Open [http://localhost:9090/targets](http://localhost:9090/targets)
+
+## Method 3: Manual installation
+
+### Manual Binary Download
+
+Download the matching binary from the release page.
+
+```bash
+(
+    export RELEASE=latest
+    export ARCH=x86_64 # or aarch64
+    export C_LIBRARY=gnu # or musl
+    curl -fL -o herakles-node-exporter \
+      "https://github.com/herakles-now/herakles-node-exporter/releases/$RELEASE/download/herakles-node-exporter-$ARCH-linux-$C_LIBRARY"
+)
+chmod +x herakles-node-exporter
+sudo install -m 0755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
+./herakles-node-exporter --version
+```
+
+#### Manual System-Wide Installation
+
+Install system-wide using the downloaded binary.
+
+```bash
+# Install binary + systemd service
+sudo herakles-node-exporter install
+
+# Install without the systemd service
+sudo herakles-node-exporter install --no-service
+
+# Force reinstall over existing installation
+sudo herakles-node-exporter install --force
+
+# Uninstall
+sudo herakles-node-exporter uninstall
+```
+
+## Method 4: Build From Source
+
+The `ebpf` feature is enabled by default. Building with eBPF requires:
+
+- a working `clang`/`llvm` toolchain
+- `libelf` development headers
+- a kernel with BTF support (`/sys/kernel/btf/vmlinux`)
 
 ### Release Build
 
@@ -105,19 +247,26 @@ herakles-node-exporter --version
 git clone https://github.com/herakles-now/herakles-node-exporter.git
 cd herakles-node-exporter
 
+# Install build dependencies (Debian/Ubuntu)
+sudo apt-get install -y clang libelf-dev
+
 # Build optimized release binary
 cargo build --release
 
-# The binary is located at:
-ls -la target/release/herakles-node-exporter
+# Verify binary
+target/release/herakles-node-exporter --version
 
-# Install system-wide
-sudo install -m 0755 target/release/herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
-
-# Verify installation
-herakles-node-exporter --version
+# Install system-wide with systemd service
+sudo target/release/herakles-node-exporter install
 ```
 
+### Release Build Without eBPF
+
+```bash
+# Release build without eBPF (smaller binary, no clang/BTF dependency)
+make release CARGOFLAGS='--no-default-features'
+```
+`
 ### Development Build
 
 ```bash
@@ -129,128 +278,6 @@ cargo run -- --help
 
 # Run with specific options
 cargo run -- -p 9215 --log-level debug
-```
-
-## Method 3: Docker
-
-### Build Docker Image
-
-```dockerfile
-# Dockerfile
-FROM rust:1.75-slim as builder
-
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/herakles-node-exporter /opt/herakles/bin/
-EXPOSE 9215
-ENTRYPOINT ["herakles-node-exporter"]
-```
-
-```bash
-# Build the image
-docker build -t herakles-node-exporter:latest .
-```
-
-### Run Container
-
-```bash
-# Basic run (requires /proc access)
-docker run -d \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  herakles-node-exporter
-
-# With custom config
-docker run -d \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
-
-# With environment variables
-docker run -d \
-  --name herakles-exporter \
-  -p 9215:9215 \
-  -v /proc:/host/proc:ro \
-  -e RUST_LOG=info \
-  herakles-node-exporter
-```
-
-## Method 4: Docker Compose
-
-### Basic Setup
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-
-services:
-  herakles-exporter:
-    image: herakles-node-exporter:latest
-    build: .
-    container_name: herakles-exporter
-    ports:
-      - "9215:9215"
-    volumes:
-      - /proc:/host/proc:ro
-    restart: unless-stopped
-```
-
-### Full Stack with Prometheus & Grafana
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-
-services:
-  herakles-exporter:
-    image: herakles-node-exporter:latest
-    build: .
-    container_name: herakles-exporter
-    ports:
-      - "9215:9215"
-    volumes:
-      - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro
-    command: ["-c", "/etc/herakles/herakles-node-exporter.yaml"]
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    depends_on:
-      - herakles-exporter
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
-volumes:
-  prometheus-data:
-  grafana-data:
 ```
 
 ## Verify Release Artifacts
@@ -303,70 +330,15 @@ cosign verify-blob \
   "${RELEASE_ARTIFACT}"
 ```
 
-## Systemd Service Setup
+## Systemd Service
 
-### Create Service File
+The installation automatically sets up a `systemd` service, starts it and prints relevant information.
 
-```bash
-# Create service file
-sudo tee /etc/systemd/system/herakles-node-exporter.service << 'EOF'
-[Unit]
-Description=Herakles Process Memory Exporter
-Documentation=https://github.com/herakles-now/herakles-node-exporter
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=prometheus
-Group=prometheus
-ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
-Restart=always
-RestartSec=5
-TimeoutStopSec=30
-
-# Security hardening
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadOnlyPaths=/
-ReadWritePaths=/var/log
-
-# Capability to read /proc
-CapabilityBoundingSet=CAP_DAC_READ_SEARCH
-AmbientCapabilities=CAP_DAC_READ_SEARCH
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-### Enable and Start Service
+> [install.sh](https://github.com/herakles-now/herakles-node-exporter/blob/main/scripts/install.sh) runs
+> `herakles-node-exporter install` which sets up the service.
 
 ```bash
-# Create dedicated user
-sudo useradd -r -s /sbin/nologin prometheus
-
-# Create config directory
-sudo mkdir -p /etc/herakles
-sudo chown prometheus:prometheus /etc/herakles
-
-# Create minimal config
-sudo tee /etc/herakles/herakles-node-exporter.yaml << 'EOF'
-port: 9215
-bind: "0.0.0.0"
-cache_ttl: 30
-log_level: "info"
-EOF
-
-# Reload systemd
-sudo systemctl daemon-reload
-
-# Enable and start service
-sudo systemctl enable herakles-node-exporter
-sudo systemctl start herakles-node-exporter
-
-# Check status
+# Check service status
 sudo systemctl status herakles-node-exporter
 ```
 
@@ -434,7 +406,7 @@ curl http://localhost:9215/health
 sudo setcap cap_dac_read_search+ep /opt/herakles/bin/herakles-node-exporter
 ```
 
-### Port Already in Use
+### Port Already In Use
 
 ```bash
 # Check what's using port 9215
@@ -463,6 +435,23 @@ uname -r
 
 # The exporter will fall back to smaps if smaps_rollup is unavailable
 # Performance may be reduced on older kernels
+```
+
+### Running As Non-Root User
+
+Reading `/proc/<pid>/smaps_rollup` for processes owned by other users requires root privileges. This file provides
+accurate USS (Unique Set Size) figures. Without root, USS data for root-owned processes is unavailable and those
+processes are silently excluded from group memory metrics.
+
+For complete multi-user system monitoring, the exporter is intended to run as `root`. The built-in installer sets up
+the systemd service as `User=root` / `Group=root` so the process retains the `/proc` access and eBPF privileges it
+needs.
+
+Check effective user before debugging missing processes:
+
+```bash
+ps aux | grep herakles-node-exporter
+# Should show: root ... herakles-node-exporter
 ```
 
 ## Next Steps
