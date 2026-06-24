@@ -26,18 +26,63 @@ The separation is architectural and deliberate. See [Why this architecture?](#wh
 ## Quick Start
 
 ```bash
-# Clone and build (eBPF enabled by default)
-git clone https://github.com/herakles-now/herakles-node-exporter.git
-cd herakles-node-exporter
-make release
-
-# Run (root required for full /proc coverage)
-sudo ./binary/herakles-node-exporter
-
-# Verify
-curl http://localhost:9215/metrics | grep herakles_group_memory_rss
-curl http://localhost:9215/html/details
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sudo sh
 ```
+
+<details>
+
+<summary>Expected output</summary>
+
+### Installed With `systemd` Service
+
+```text
+Installing herakles-node-exporter v0.1.1 for x86_64-linux-gnu
+Running system installation
+🚀 Herakles Node Exporter - System Installation
+===============================================
+
+📁 Creating directory structure...
+   ✅ Directory structure created with root ownership
+📦 Installing binary...
+   ✅ Binary installed to /opt/herakles/bin/herakles-node-exporter
+🔗 Installing CLI symlink...
+   ✅ Symlink installed to /usr/local/bin/herakles-node-exporter
+⚙  Generating default configuration...
+   ✅ Config written to /etc/herakles/herakles-node-exporter.yaml
+🔧 Installing systemd service...
+   ✅ systemd unit installed
+🔄 Reloading systemd...
+✅ Enabling service...
+Created symlink '/etc/systemd/system/multi-user.target.wants/herakles-node-exporter.service' → '/etc/systemd/system/herakles-node-exporter.service'.
+🚀 Starting service...
+
+🔧 Configuring kernel parameters for eBPF...
+   ✅ kernel.unprivileged_bpf_disabled = 1
+   ✅ kernel.perf_event_paranoid = 2
+   ✅ Persistent configuration written to /etc/sysctl.d/99-herakles-ebpf.conf
+
+✅ Installation complete!
+
+Next steps:
+  • Check status: systemctl status herakles-node-exporter
+  • View logs:    journalctl -u herakles-node-exporter -f
+  • Access:       http://localhost:9215/metrics
+```
+
+</details>
+
+Open [http://localhost:9215/html/dashboard](http://localhost:9215/html/dashboard) to see the dashboard.
+
+<details>
+
+<summary>Dashboard screenshot</summary>
+
+[![Dashboard screenshot](wiki/images/builtin-dashboard.png "Dashboard screenshot")](wiki/images/builtin-dashboard.png)
+
+</details>
+
+The [Installation Guide](https://github.com/herakles-now/herakles-node-exporter/blob/main/wiki/Installation.md#installation-guide)
+shows other installation methods and [how to uninstall](https://github.com/herakles-now/herakles-node-exporter/blob/main/wiki/Installation.md#uninstall).
 
 Prometheus scrape config:
 
@@ -445,7 +490,7 @@ docker run -d \
 Configuration is loaded from the first file found in this order, then merged with CLI flags (CLI takes precedence):
 
 1. `--config <path>` if specified
-2. `/etc/herakles/node-exporter.yaml` (also `.yml`, `.json`)
+2. `/etc/herakles/herakles-node-exporter.yaml` (also `.yml`, `.json`)
 3. `./herakles-node-exporter.yaml` (also `.yml`, `.json`)
 
 Use `--no-config` to ignore all config files. Use `--show-config` to print the effective merged configuration.
@@ -748,7 +793,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/herakles-node-exporter
+ExecStart=/opt/herakles/bin/herakles-node-exporter
 Restart=on-failure
 RestartSec=5s
 ProtectSystem=strict

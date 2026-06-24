@@ -15,7 +15,88 @@ This guide covers all installation methods for the Herakles Process Memory Expor
 herakles-node-exporter check --all
 ```
 
-## Method 1: From Source
+## Method 1: Install Release Binary
+
+### One-Line Installer
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | sudo sh
+```
+
+<details>
+
+<summary>Expected output</summary>
+
+### Installed With `systemd` Service
+
+```text
+Installing herakles-node-exporter v0.1.1 for x86_64-linux-gnu
+Running system installation
+🚀 Herakles Node Exporter - System Installation
+===============================================
+
+📁 Creating directory structure...
+   ✅ Directory structure created with root ownership
+📦 Installing binary...
+   ✅ Binary installed to /opt/herakles/bin/herakles-node-exporter
+🔗 Installing CLI symlink...
+   ✅ Symlink installed to /usr/local/bin/herakles-node-exporter
+⚙  Generating default configuration...
+   ✅ Config written to /etc/herakles/herakles-node-exporter.yaml
+🔧 Installing systemd service...
+   ✅ systemd unit installed
+🔄 Reloading systemd...
+✅ Enabling service...
+Created symlink '/etc/systemd/system/multi-user.target.wants/herakles-node-exporter.service' → '/etc/systemd/system/herakles-node-exporter.service'.
+🚀 Starting service...
+
+🔧 Configuring kernel parameters for eBPF...
+   ✅ kernel.unprivileged_bpf_disabled = 1
+   ✅ kernel.perf_event_paranoid = 2
+   ✅ Persistent configuration written to /etc/sysctl.d/99-herakles-ebpf.conf
+
+✅ Installation complete!
+
+Next steps:
+  • Check status: systemctl status herakles-node-exporter
+  • View logs:    journalctl -u herakles-node-exporter -f
+  • Access:       http://localhost:9215/metrics
+```
+
+</details>
+
+Open [http://localhost:9215/html/dashboard](http://localhost:9215/html/dashboard) to see the dashboard.
+
+<details>
+
+<summary>Dashboard screenshot</summary>
+
+[![Dashboard screenshot](images/builtin-dashboard.png "Dashboard screenshot")](images/builtin-dashboard.png)
+
+</details>
+
+Specific version:
+
+```bash
+curl -fsSL https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/install.sh | \
+  sudo sh -s -- --version <version>
+```
+
+### Manual Binary Install
+
+Download the matching binary from the release page and install it directly.
+
+Example:
+
+```bash
+curl -fL -o herakles-node-exporter \
+  https://github.com/herakles-now/herakles-node-exporter/releases/latest/download/herakles-node-exporter-x86_64-linux-gnu
+chmod +x herakles-node-exporter
+sudo install -m 0755 herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
+herakles-node-exporter --version
+```
+
+## Method 2: From Source
 
 ### Release Build
 
@@ -31,8 +112,7 @@ cargo build --release
 ls -la target/release/herakles-node-exporter
 
 # Install system-wide
-sudo cp target/release/herakles-node-exporter /usr/local/bin/
-sudo chmod +x /usr/local/bin/herakles-node-exporter
+sudo install -m 0755 target/release/herakles-node-exporter /opt/herakles/bin/herakles-node-exporter
 
 # Verify installation
 herakles-node-exporter --version
@@ -51,38 +131,6 @@ cargo run -- --help
 cargo run -- -p 9215 --log-level debug
 ```
 
-## Method 2: Debian/Ubuntu Package
-
-### Build the Package
-
-```bash
-# Install cargo-deb if not present
-cargo install cargo-deb
-
-# Build .deb package
-cargo deb
-
-# The package is created at:
-ls -la target/debian/herakles-node-exporter_*.deb
-```
-
-### Install the Package
-
-```bash
-# Install the .deb package
-sudo dpkg -i target/debian/herakles-node-exporter_*.deb
-
-# Or with apt (handles dependencies)
-sudo apt install ./target/debian/herakles-node-exporter_*.deb
-```
-
-### Package Contents
-
-The Debian package installs:
-- `/usr/bin/herakles-node-exporter` - Main binary
-- `/etc/herakles-node-exporter/herakles-node-exporter.yaml` - Config file
-- `/lib/systemd/system/herakles-node-exporter.service` - Systemd service
-
 ## Method 3: Docker
 
 ### Build Docker Image
@@ -96,7 +144,7 @@ COPY . .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/herakles-node-exporter /usr/local/bin/
+COPY --from=builder /app/target/release/herakles-node-exporter /opt/herakles/bin/
 EXPOSE 9215
 ENTRYPOINT ["herakles-node-exporter"]
 ```
@@ -121,8 +169,8 @@ docker run -d \
   --name herakles-exporter \
   -p 9215:9215 \
   -v /proc:/host/proc:ro \
-  -v $(pwd)/config.yaml:/etc/herakles/config.yaml:ro \
-  herakles-node-exporter -c /etc/herakles/config.yaml
+  -v $(pwd)/config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro \
+  herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 
 # With environment variables
 docker run -d \
@@ -168,8 +216,8 @@ services:
       - "9215:9215"
     volumes:
       - /proc:/host/proc:ro
-      - ./config.yaml:/etc/herakles/config.yaml:ro
-    command: ["-c", "/etc/herakles/config.yaml"]
+      - ./config.yaml:/etc/herakles/herakles-node-exporter.yaml:ro
+    command: ["-c", "/etc/herakles/herakles-node-exporter.yaml"]
     restart: unless-stopped
 
   prometheus:
@@ -205,6 +253,56 @@ volumes:
   grafana-data:
 ```
 
+## Verify Release Artifacts
+
+Download a release artifact:
+
+```bash
+export RELEASE=latest
+export RELEASE_ARTIFACT=herakles-node-exporter-x86_64-linux-gnu
+
+# Download artifact
+curl -LO \
+  "https://github.com/herakles-now/herakles-node-exporter/releases/${RELEASE}/download/${RELEASE_ARTIFACT}"
+```
+
+### Verify Artifact Against The `SHA256SUMS` Manifest
+
+```bash
+# Download the SHA256SUMS file
+curl -LO \
+  "https://github.com/herakles-now/herakles-node-exporter/releases/${RELEASE}/download/SHA256SUMS"
+
+# Verify the artifact against the SHA256SUMS manifest
+grep -E "  ${RELEASE_ARTIFACT}$" SHA256SUMS | sha256sum -c -
+```
+
+### Verify Artifact Provenance With `gh`
+
+```bash
+# Verify provenance and print a compact success message
+gh attestation verify \
+  "${RELEASE_ARTIFACT}" \
+  --repo herakles-now/herakles-node-exporter \
+  --format json \
+| jq -r '"OK: " + .[0].verificationResult.statement.subject[0].name'
+```
+
+### Verify Sigstore Signature With `cosign`
+
+```bash
+# Download the Sigstore bundle
+curl -LO \
+  "https://github.com/herakles-now/herakles-node-exporter/releases/${RELEASE}/download/${RELEASE_ARTIFACT}.sigstore.json"
+
+# Verify signature
+cosign verify-blob \
+  --bundle "${RELEASE_ARTIFACT}.sigstore.json" \
+  --certificate-identity-regexp "https://github.com/herakles-now/herakles-node-exporter/.github/workflows/.*@refs/tags/v.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  "${RELEASE_ARTIFACT}"
+```
+
 ## Systemd Service Setup
 
 ### Create Service File
@@ -222,7 +320,7 @@ Wants=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
-ExecStart=/usr/local/bin/herakles-node-exporter -c /etc/herakles/config.yaml
+ExecStart=/opt/herakles/bin/herakles-node-exporter -c /etc/herakles/herakles-node-exporter.yaml
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
@@ -254,7 +352,7 @@ sudo mkdir -p /etc/herakles
 sudo chown prometheus:prometheus /etc/herakles
 
 # Create minimal config
-sudo tee /etc/herakles/config.yaml << 'EOF'
+sudo tee /etc/herakles/herakles-node-exporter.yaml << 'EOF'
 port: 9215
 bind: "0.0.0.0"
 cache_ttl: 30
@@ -333,7 +431,7 @@ curl http://localhost:9215/health
 ```bash
 # Error: Permission denied reading /proc/*/smaps
 # Solution: Run with appropriate capabilities
-sudo setcap cap_dac_read_search+ep /usr/local/bin/herakles-node-exporter
+sudo setcap cap_dac_read_search+ep /opt/herakles/bin/herakles-node-exporter
 ```
 
 ### Port Already in Use
