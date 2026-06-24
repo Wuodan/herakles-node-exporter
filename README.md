@@ -27,7 +27,7 @@ The separation is architectural and deliberate. See [Why this architecture?](#wh
 
 ```bash
 # Clone and build (eBPF enabled by default)
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
+git clone https://github.com/herakles-now/herakles-node-exporter.git
 cd herakles-node-exporter
 make release
 
@@ -742,7 +742,7 @@ ps aux | grep herakles-node-exporter
 ```ini
 [Unit]
 Description=Herakles Node Exporter
-Documentation=https://github.com/cansp-dev/herakles-node-exporter
+Documentation=https://github.com/herakles-now/herakles-node-exporter
 After=network.target
 
 [Service]
