@@ -127,7 +127,7 @@ scrape_configs:
 
 MORE INFORMATION
 ----------------
-GitHub: https://github.com/cansp-dev/herakles-node-exporter
+GitHub: https://github.com/herakles-now/herakles-node-exporter
 Documentation: See /config and /subgroups endpoints for runtime info
 
 {}

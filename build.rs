@@ -1,12 +1,17 @@
 // build.rs
 use std::env;
+use vergen::{Build, Emitter};
+use vergen_gitcl::Gitcl;
 
 fn main() {
     // Generate build info
-    vergen::EmitBuilder::builder()
-        .all_build()
-        .all_git()
-        .emit()
+    let build = Build::all_build();
+    let gitcl = Gitcl::all_git();
+
+    Emitter::default()
+        .add_instructions(&build)
+        .and_then(|emitter| emitter.add_instructions(&gitcl))
+        .and_then(|emitter| emitter.emit())
         .expect("Unable to generate build info");
 
     // Check if ebpf feature is enabled

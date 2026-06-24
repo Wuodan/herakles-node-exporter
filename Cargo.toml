@@ -14,8 +14,6 @@ categories = ["command-line-utilities", "monitoring"]
 default = ["ebpf"]
 # Enable eBPF-based metrics collection
 ebpf = ["libbpf-rs", "libbpf-sys"]
-# Enable actix-web health server example
-health-actix = ["actix-web"]
 
 [dependencies]
 axum = { version = "0.8", features = ["http1", "macros", "tokio"] }
@@ -46,13 +44,10 @@ sled = "0.34"
 libc = "0.2"
 
 # Random number generation for testdata
-rand = "0.9"
+rand = "0.10"
 
 # DateTime handling for testdata timestamp
 chrono = { version = "0.4", features = ["serde"] }
-
-# Optional: actix-web for health server example
-actix-web = { version = "4", optional = true }
 
 # TLS support
 axum-server = { version = "0.8", features = ["tls-rustls"] }
@@ -71,7 +66,8 @@ thiserror = "2.0"
 
 
 [build-dependencies]
-vergen = { version = "8.0", features = ["build", "git", "gitcl"] }
+vergen = { version = "10.0.0", features = ["build"] }
+vergen-gitcl = { version = "10.0.0", features = ["build"] }
 which = "8.0"
 
 [profile.dev]

@@ -27,7 +27,7 @@ installation, configuration, and usage of the exporter.
 
 ```bash
 # From source
-git clone https://github.com/cansp-dev/herakles-node-exporter.git
+git clone https://github.com/herakles-now/herakles-node-exporter.git
 cd herakles-node-exporter
 cargo build --release
 sudo cp target/release/herakles-node-exporter /usr/local/bin/
@@ -107,16 +107,16 @@ herakles_mem_group_rss_bytes{group="web",subgroup="nginx"} 419430400
 
 ## 🔗 Useful Links
 
-- [GitHub Repository](https://github.com/cansp-dev/herakles-node-exporter)
+- [GitHub Repository](https://github.com/herakles-now/herakles-node-exporter)
 - [Prometheus Documentation](https://prometheus.io/docs/)
 - [Grafana Dashboards](https://grafana.com/grafana/dashboards/)
 
 ## 📝 Getting Help
 
 - Check the [Troubleshooting](Troubleshooting.md) guide
-- Open an issue on [GitHub](https://github.com/cansp-dev/herakles-node-exporter/issues)
+- Open an issue on [GitHub](https://github.com/herakles-now/herakles-node-exporter/issues)
 - Contact: <exporter@herakles.now>
 
 ## 🔗 Project & Support
 
-Project: <https://github.com/cansp-dev/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>
+Project: <https://github.com/herakles-now/herakles-node-exporter> — More info: <https://www.herakles.now> — Support: <exporter@herakles.now>
