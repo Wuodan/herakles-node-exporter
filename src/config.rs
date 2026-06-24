@@ -363,8 +363,8 @@ pub fn validate_effective_config(cfg: &Config) -> Result<(), Box<dyn std::error:
             }
             (Some(cert), Some(key)) => {
                 // Check if files exist
-                let cert_path = std::path::Path::new(cert);
-                let key_path = std::path::Path::new(key);
+                let cert_path = Path::new(cert);
+                let key_path = Path::new(key);
 
                 if !cert_path.exists() {
                     return Err(format!("TLS certificate file not found: {}", cert).into());
@@ -374,7 +374,7 @@ pub fn validate_effective_config(cfg: &Config) -> Result<(), Box<dyn std::error:
                 }
 
                 // Check if files are readable and not empty
-                match std::fs::metadata(cert_path) {
+                match fs::metadata(cert_path) {
                     Ok(meta) if meta.len() == 0 => {
                         return Err(format!("TLS certificate file is empty: {}", cert).into());
                     }
@@ -388,7 +388,7 @@ pub fn validate_effective_config(cfg: &Config) -> Result<(), Box<dyn std::error:
                     Ok(_) => {}
                 }
 
-                match std::fs::metadata(key_path) {
+                match fs::metadata(key_path) {
                     Ok(meta) if meta.len() == 0 => {
                         return Err(format!("TLS private key file is empty: {}", key).into());
                     }
