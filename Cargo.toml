@@ -52,7 +52,7 @@ rand = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 
 # TLS support
-axum-server = { version = "0.8", features = ["tls-rustls"] }
+axum-server = { version = "0.9", features = ["tls-rustls"] }
 
 # eBPF support (optional - feature gated)
 libbpf-rs = { version = "0.27", optional = true }
