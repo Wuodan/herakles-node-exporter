@@ -59,7 +59,7 @@ libbpf-rs = { version = "0.27", optional = true }
 libbpf-sys = { version = "1.4", optional = true }
 
 # System user/group management for install command
-nix = { version = "0.31", features = ["user", "process", "fs"] }
+nix = { version = "0.32", features = ["user", "process", "fs"] }
 
 [build-dependencies]
 vergen = { version = "10.0.0", features = ["build"] }
